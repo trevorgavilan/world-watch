@@ -1,0 +1,12 @@
+World Watch — third-party code notice
+
+This repository is private and its code is Trevor Gavilan's (decision D-3).
+
+Files copied or closely ported from other projects are listed here with their licence.
+A file ported from World Monitor is AGPL-3.0 ("Based on World Monitor", with a link);
+anything lifted from God's Eye View keeps its MIT copyright line.
+
+Listed files: none yet.
+
+Data credits (not code): U.S. Geological Survey (public domain); CISA KEV (CC0 1.0);
+the GDELT Project (https://www.gdeltproject.org/). Each stored item carries its source's licence.
