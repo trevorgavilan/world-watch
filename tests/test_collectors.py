@@ -22,7 +22,10 @@ class Usgs(unittest.TestCase):
             self.assertIsNotNone(item.lat)
             mag = float(item.severity[1:].split()[0])
             sig = json.loads(item.raw)["properties"].get("sig") or 0
-            self.assertTrue(mag >= 4.5 or item.country == "MX" or sig >= 600, item.title)
+            self.assertTrue(mag >= 4.5 or usgs.near_mexico(item.lat, item.lon) or sig >= 600, item.title)
+            place = json.loads(item.raw)["properties"].get("place") or ""
+            in_mexico = place.endswith("Mexico") and not place.endswith("New Mexico")
+            self.assertEqual(item.country == "MX", in_mexico, place)
 
     def test_time_is_the_event_not_the_fetch(self):
         items = usgs.COLLECTOR.parse(fixture("usgs_4.5_day.geojson"), NOW)
@@ -53,6 +56,29 @@ class Usgs(unittest.TestCase):
         ]}).encode()
         items = usgs.COLLECTOR.parse(payload, NOW)
         self.assertEqual([i.title for i in items], ["M 6.0 - x"])
+
+    def test_impossible_time_skips_that_record_only(self):
+        good = {"id": "ok", "properties": {"mag": 6.0, "time": 1792795371088, "title": "M 6.0 - x"},
+                "geometry": {"coordinates": [10.0, 10.0, 5.0]}}
+        bad = {"id": "bad", "properties": {"mag": 6.0, "time": 1e30, "title": "M 6.0 - y"},
+               "geometry": {"coordinates": [10.0, 10.0, 5.0]}}
+        payload = json.dumps({"type": "FeatureCollection", "features": [bad, good]}).encode()
+        self.assertEqual([i.title for i in usgs.COLLECTOR.parse(payload, NOW)], ["M 6.0 - x"])
+        payload = payload.replace(b"1e+30", b"Infinity")
+        self.assertEqual([i.title for i in usgs.COLLECTOR.parse(payload, NOW)], ["M 6.0 - x"])
+
+    def test_mexico_is_the_sources_own_place_text_not_our_box(self):
+        def feature(place, lat, lon):
+            return {"id": place, "properties": {"mag": 3.6, "time": 1792795371088, "title": f"M 3.6 - {place}",
+                                                "place": place}, "geometry": {"coordinates": [lon, lat, 5.0]}}
+        payload = json.dumps({"type": "FeatureCollection", "features": [
+            feature("10 km N of El Paso, Texas", 31.9, -106.4),
+            feature("12 km SW of Pinotepa Nacional, Mexico", 16.3, -98.1),
+        ]}).encode()
+        items = {i.title: i for i in usgs.COLLECTOR.parse(payload, NOW)}
+        self.assertIsNone(items["M 3.6 - 10 km N of El Paso, Texas"].country)  # kept by the box, not called Mexico
+        self.assertEqual(items["M 3.6 - 12 km SW of Pinotepa Nacional, Mexico"].country, "MX")
+        self.assertTrue(all(i.basis == "reported" for i in items.values()))
 
     @unittest.skipUnless(LIVE, "set WW_LIVE=1 to hit the live feed")
     def test_live(self):
@@ -105,9 +131,13 @@ class Gdelt(unittest.TestCase):
     def test_empty_result_is_no_items_not_an_error(self):
         self.assertEqual(gdelt.COLLECTORS[0].parse(b"{}", NOW), [])
 
-    def test_rate_limit_text_is_a_parse_error(self):
+    def test_rate_limit_text_with_200_is_rate_limited(self):
+        with self.assertRaises(RateLimited):
+            gdelt.COLLECTORS[0].parse(b"Please limit requests to one every 5 seconds or contact ...", NOW)
+
+    def test_other_text_is_a_parse_error(self):
         with self.assertRaises(ParseError):
-            gdelt.COLLECTORS[0].parse(b"Please limit requests to one every 5 seconds", NOW)
+            gdelt.COLLECTORS[0].parse(b"Your search contained an invalid operator", NOW)
 
     def test_spanish_maps_to_es(self):
         payload = json.dumps({"articles": [{"url": "https://www.jornada.com.mx/a", "title": "Sismo en Oaxaca",

@@ -131,6 +131,15 @@ class Store:
                 (source, next_due, fail_count, iso_utc(started) if ok else None, error, n_items if ok else None),
             )
 
+    def defer(self, source: str, next_due: str) -> None:
+        """Push a source's next turn back without counting a failure or a run."""
+        with self.db:
+            self.db.execute(
+                "INSERT INTO source_state (source, next_due, fail_count) VALUES (?, ?, 0) "
+                "ON CONFLICT(source) DO UPDATE SET next_due = excluded.next_due",
+                (source, next_due),
+            )
+
     def runs_since(self, start: str) -> list[sqlite3.Row]:
         return self.db.execute(
             "SELECT * FROM runs WHERE started_at >= ? ORDER BY started_at, id", (start,)

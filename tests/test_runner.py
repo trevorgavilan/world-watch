@@ -1,3 +1,4 @@
+import sqlite3
 import unittest
 from datetime import datetime, timedelta, timezone
 
@@ -122,7 +123,65 @@ class RunOnce(unittest.TestCase):
         self.assertEqual(self.store.source_state("a")["fail_count"], 1)
 
 
+class HostAndClock(unittest.TestCase):
+    def setUp(self):
+        self.store = Store(temp_dir() / "ww.sqlite3")
+
+    def tearDown(self):
+        self.store.close()
+
+    def test_rate_limit_on_a_host_defers_its_other_sources_without_a_failure(self):
+        one = Collector(source="g1", channel="news", url="https://api.same.org/1", interval_s=3600,
+                        licence="t", parse_records=lambda d, f: [])
+        two = Collector(source="g2", channel="news", url="https://api.same.org/2", interval_s=3600,
+                        licence="t", parse_records=lambda d, f: [])
+        other = fake_collector("elsewhere")
+        fetcher = FakeFetcher({one.url: RateLimited("429", None)})
+        results = runner.run_once(self.store, [one, two, other], fetcher, NOW)
+        self.assertEqual(fetcher.calls, [one.url, other.url])
+        self.assertEqual([r.source for r in results], ["g1", "elsewhere"])
+        deferred = self.store.source_state("g2")
+        self.assertEqual(deferred["next_due"], self.store.source_state("g1")["next_due"])
+        self.assertEqual(deferred["fail_count"], 0)
+        self.assertEqual(len(self.store.runs_since(iso(NOW))), 2)  # a deferral is not a run
+
+    def test_a_next_due_far_in_the_future_counts_as_due(self):
+        a = fake_collector("a", interval_s=600)
+        far = NOW + timedelta(days=30)  # stored while the clock ran ahead
+        self.store.record_run("a", NOW, NOW, ok=True, n_items=0, error=None, next_due=iso(far), fail_count=0)
+        self.assertTrue(runner.is_due(self.store, a, NOW))
+        near = NOW + timedelta(seconds=500)
+        self.store.record_run("a", NOW, NOW, ok=True, n_items=0, error=None, next_due=iso(near), fail_count=0)
+        self.assertFalse(runner.is_due(self.store, a, NOW))
+        backing_off = NOW + timedelta(seconds=runner.RATE_LIMIT_MAX_S - 60)
+        self.store.record_run("a", NOW, NOW, ok=True, n_items=0, error=None, next_due=iso(backing_off), fail_count=3)
+        self.assertFalse(runner.is_due(self.store, a, NOW))
+
+
 class Loop(unittest.TestCase):
+    def test_a_failing_cycle_is_logged_and_the_loop_goes_on(self):
+        store = Store(temp_dir() / "ww.sqlite3")
+        clock = [NOW]
+        real_state = store.source_state
+        calls = {"n": 0}
+
+        def flaky_state(source):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise sqlite3.OperationalError("database is locked")
+            return real_state(source)
+
+        store.source_state = flaky_state
+
+        def sleep(seconds):
+            clock[0] += timedelta(seconds=seconds)
+
+        with self.assertLogs("worldwatch.runner", level="ERROR"):
+            runner.run_loop(store, [fake_collector("a")], FakeFetcher(), now=lambda: clock[0], sleep=sleep,
+                            tick_s=60, stop_at=NOW + timedelta(seconds=150))
+        self.assertEqual(len(store.runs_since(iso(NOW))), 1)  # cycle 1 failed, cycle 2 fetched
+        store.close()
+
     def test_loop_runs_cycles_and_calls_after_cycle_when_something_arrived(self):
         store = Store(temp_dir() / "ww.sqlite3")
         clock = [NOW]

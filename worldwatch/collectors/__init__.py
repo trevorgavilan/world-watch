@@ -11,9 +11,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable
 
-from ..item import InvalidItem, Item
+from ..http import RateLimited
+from ..item import Item
 
 log = logging.getLogger(__name__)
+
+RATE_LIMIT_TEXT = "Please limit requests"
 
 
 class ParseError(Exception):
@@ -36,7 +39,7 @@ class Collector:
         for build in self.parse_records(data, fetched_at):
             try:
                 items.append(build())
-            except (InvalidItem, KeyError, TypeError, ValueError) as err:
+            except Exception as err:  # noqa: BLE001 — one odd record (an overflowing time…) never sinks the batch
                 skipped += 1
                 log.debug("%s: skipped a record: %s", self.source, err)
         if skipped:
@@ -49,6 +52,8 @@ def decode_json(payload: bytes, source: str) -> object:
         text = payload.decode("utf-8")
     except UnicodeDecodeError as err:
         raise ParseError(f"{source}: not UTF-8") from err
+    if text.lstrip().startswith(RATE_LIMIT_TEXT):  # GDELT sometimes says "slow down" with a 200
+        raise RateLimited(f"{source}: rate-limit text with HTTP 200", None)
     try:
         # strict=False: GDELT titles sometimes carry raw control characters.
         return json.loads(text, strict=False)

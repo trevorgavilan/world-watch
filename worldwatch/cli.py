@@ -2,9 +2,11 @@
 
   once            fetch every due source once, then build Recon
   loop [--hours]  keep fetching on each source's interval; rebuild Recon when something arrives
-  logon           what the logon task runs: fetch, build Recon, open it, then loop (one copy only)
+  logon           what the logon task runs: fetch, build Recon, open it, then loop
   recon [--open]  build Recon from what is stored
   status [--hours] per-source runs, failures and the longest gap — the unattended-run evidence
+
+once, loop and logon collect, so only one of them runs at a time (an OS file lock).
 """
 
 from __future__ import annotations
@@ -12,7 +14,9 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import socket
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -37,7 +41,7 @@ def setup_logging(base: Path) -> None:
     ]
     if sys.stderr is not None:  # pythonw has no console
         handlers.append(logging.StreamHandler())
-    logging.basicConfig(level=logging.INFO, handlers=handlers,
+    logging.basicConfig(level=logging.INFO, handlers=handlers, force=True,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 
@@ -49,6 +53,7 @@ class SingleInstance:
         self.handle = None
 
     def acquire(self) -> bool:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         self.handle = open(self.path, "a+b")
         try:
             if os.name == "nt":
@@ -64,9 +69,35 @@ class SingleInstance:
             return False
         return True
 
+    def release(self) -> None:
+        if self.handle is None:
+            return
+        try:
+            if os.name == "nt":
+                import msvcrt
+                self.handle.seek(0)
+                msvcrt.locking(self.handle.fileno(), msvcrt.LK_UNLCK, 1)
+        finally:
+            self.handle.close()  # closing also drops a POSIX flock
+            self.handle = None
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def wait_for_network(resolve=socket.getaddrinfo, sleep=time.sleep, attempts: int = 12,
+                     pause_s: float = 10, host: str = "earthquake.usgs.gov") -> bool:
+    """At logon the network often isn't up yet: wait (up to ~2 min) until a feed's name resolves.
+    A DNS lookup of a feed we read anyway — nothing is probed."""
+    for attempt in range(attempts):
+        try:
+            resolve(host, 443)
+            return True
+        except OSError:
+            if attempt < attempts - 1:
+                sleep(pause_s)
+    return False
 
 
 def _build_recon(store: Store, collectors, base: Path) -> Path:
@@ -82,30 +113,60 @@ def _open(path: Path) -> None:
         log.info("open it: %s", path)
 
 
+def _locked(base: Path) -> SingleInstance | None:
+    lock = SingleInstance(base / "worldwatch.lock")
+    if lock.acquire():
+        return lock
+    log.warning("another World Watch is already collecting (the logon task?); not starting a second one")
+    return None
+
+
 def cmd_once(store, collectors, base, args) -> int:
-    results = runner.run_once(store, collectors, Fetcher(), _now())
-    _build_recon(store, collectors, base)
+    lock = _locked(base)
+    if lock is None:
+        return 2
+    try:
+        results = runner.run_once(store, collectors, Fetcher(), _now())
+        _build_recon(store, collectors, base)
+    finally:
+        lock.release()
     return 0 if all(r.ok for r in results) else 1
 
 
 def cmd_loop(store, collectors, base, args) -> int:
+    lock = _locked(base)
+    if lock is None:
+        return 2
     stop_at = _now() + timedelta(hours=args.hours) if args.hours else None
-    runner.run_loop(store, collectors, Fetcher(), stop_at=stop_at,
-                    after_cycle=lambda results: _build_recon(store, collectors, base))
+    try:
+        runner.run_loop(store, collectors, Fetcher(), stop_at=stop_at,
+                        after_cycle=lambda results: _build_recon(store, collectors, base))
+    finally:
+        lock.release()
     return 0
 
 
 def cmd_logon(store, collectors, base, args) -> int:
-    lock = SingleInstance(base / "worldwatch.lock")
-    if not lock.acquire():
-        log.info("already running; opening the latest Recon only")
-        latest = base / "recon" / "recon-latest.html"
+    latest = base / "recon" / "recon-latest.html"
+    lock = _locked(base)
+    if lock is None:
         if latest.exists():
             _open(latest)
         return 0
-    runner.run_once(store, collectors, Fetcher(), _now())
-    _open(_build_recon(store, collectors, base))
-    runner.run_loop(store, collectors, Fetcher(),
+    if not wait_for_network():
+        log.warning("no network after waiting; building Recon from what is stored")
+    fetcher = Fetcher()
+    try:
+        runner.run_once(store, collectors, fetcher, _now())
+    except Exception:  # noqa: BLE001 — still show Recon and keep collecting
+        log.exception("first fetch failed")
+    try:
+        _open(_build_recon(store, collectors, base))
+    except Exception:  # noqa: BLE001
+        log.exception("Recon build failed; opening the last one")
+        if latest.exists():
+            _open(latest)
+    runner.run_loop(store, collectors, fetcher,
                     after_cycle=lambda results: _build_recon(store, collectors, base))
     return 0
 
@@ -135,6 +196,9 @@ def cmd_status(store, collectors, base, args) -> int:
     return 0
 
 
+COMMANDS = {"once": cmd_once, "loop": cmd_loop, "logon": cmd_logon, "recon": cmd_recon, "status": cmd_status}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="worldwatch", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -148,16 +212,21 @@ def main(argv: list[str] | None = None) -> int:
     status = sub.add_parser("status")
     status.add_argument("--hours", type=float, default=24.0)
     args = parser.parse_args(argv)
-    if sys.stdout is not None and hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # the Windows console defaults to cp1252
+    for stream in (sys.stdout, sys.stderr):  # the Windows console defaults to cp1252; pythonw has neither
+        if stream is not None and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
 
     base = home()
     setup_logging(base)
-    store = Store(base / "worldwatch.sqlite3")
-    commands = {"once": cmd_once, "loop": cmd_loop, "logon": cmd_logon, "recon": cmd_recon, "status": cmd_status}
+    store = None
     try:
-        return commands[args.command](store, all_collectors(), base, args)
+        store = Store(base / "worldwatch.sqlite3")
+        return COMMANDS[args.command](store, all_collectors(), base, args)
     except KeyboardInterrupt:
         return 130
+    except Exception:  # noqa: BLE001 — under pythonw there is no console: the log is the only witness
+        log.exception("World Watch stopped on an unexpected error")
+        return 1
     finally:
-        store.close()
+        if store is not None:
+            store.close()

@@ -30,6 +30,12 @@ def near_mexico(lat: float, lon: float) -> bool:
     return lat_min <= lat <= lat_max and lon_min <= lon <= lon_max
 
 
+def in_mexico_per_usgs(place: object) -> bool:
+    """USGS's own place text ("12 km SW of Pinotepa Nacional, Mexico") — reported, not our guess.
+    The box above only decides what to keep; it also covers Texas, Arizona and Guatemala."""
+    return isinstance(place, str) and place.rstrip().endswith("Mexico") and not place.rstrip().endswith("New Mexico")
+
+
 def keep(mag: float | None, sig: object, lat: float, lon: float) -> bool:
     if isinstance(sig, (int, float)) and sig >= SIGNIFICANT_MIN_SIG:
         return True
@@ -61,7 +67,7 @@ def _build(feature: dict, fetched_at: datetime):
         summary=f"{depth}{tsunami}",
         lat=lat,
         lon=lon,
-        country="MX" if near_mexico(lat, lon) else None,
+        country="MX" if in_mexico_per_usgs(props.get("place")) else None,
         severity=severity,
         licence=LICENCE,
         raw=feature,
@@ -80,8 +86,8 @@ def parse_records(data: object, fetched_at: datetime) -> list:
             mag = props.get("mag")
             if not keep(mag if isinstance(mag, (int, float)) else None, props.get("sig"), lat, lon):
                 continue
-        except (KeyError, TypeError, ValueError):
-            continue  # malformed record: skipped, the rest still count
+        except Exception:  # noqa: BLE001 — malformed record: skipped, the rest still count
+            continue
         builders.append(partial(_build, feature, fetched_at))
     return builders
 

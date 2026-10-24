@@ -10,6 +10,7 @@ import base64
 import hashlib
 from html import escape
 
+from .item import clean_url
 from .recon import CREDITS, Group, Recon, Section, local, show_event, show_time
 
 CSS = """
@@ -81,8 +82,9 @@ def t(en: str, es: str) -> str:
 
 def _item(row) -> str:
     title = escape(row["title"])
-    if row["url"]:
-        head = f'<a class="title" href="{escape(row["url"])}" target="_blank" rel="noopener noreferrer">{title}</a>'
+    url = clean_url(row["url"])  # checked again here: the page must not trust the store
+    if url:
+        head = f'<a class="title" href="{escape(url)}" target="_blank" rel="noopener noreferrer">{title}</a>'
     else:
         head = f'<span class="title">{title}</span>'
     meta = []

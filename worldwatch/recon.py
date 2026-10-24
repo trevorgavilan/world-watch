@@ -7,7 +7,9 @@ Mexico City time, which has been UTC-6 all year since Mexico dropped DST in 2022
 
 from __future__ import annotations
 
+import contextlib
 import os
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -98,8 +100,8 @@ def gather(store: Store, collectors: list[Collector], now: datetime) -> Recon:
     mexico = sorted((q for q in quakes if q["country"] == "MX"), key=_magnitude, reverse=True)
     world = sorted((q for q in quakes if q["country"] != "MX"), key=_magnitude, reverse=True)
     hazards = Section("hazards", "Earthquakes — last 24 h", "Sismos — últimas 24 h", [
-        Group("Mexico", "México", mexico[:QUAKE_LIMIT]),
-        Group("World, M4.5+", "Mundo, M4.5+", world[:QUAKE_LIMIT]),
+        Group("Mexico (USGS place)", "México (lugar según USGS)", mexico[:QUAKE_LIMIT]),
+        Group("World — M4.5+, and M3.5+ near Mexico", "Mundo — M4.5+, y M3.5+ cerca de México", world[:QUAKE_LIMIT]),
     ])
     security = Section("security", "Exploited vulnerabilities — added in 7 days",
                        "Vulnerabilidades explotadas — añadidas en 7 días", [
@@ -124,9 +126,16 @@ def _status(store: Store, collector: Collector, now: datetime) -> SourceStatus:
 
 
 def _write_atomic(path: Path, text: str) -> None:
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(text, encoding="utf-8", newline="\n")
-    os.replace(tmp, path)
+    """Write beside the target under a unique name, then swap it in (two writers never share a temp file)."""
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+        os.replace(tmp_name, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_name)
+        raise
 
 
 def build(store: Store, collectors: list[Collector], now: datetime, out_dir: Path) -> tuple[Path, Path]:

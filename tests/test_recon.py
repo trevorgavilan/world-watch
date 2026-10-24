@@ -56,6 +56,19 @@ class ReconBuild(unittest.TestCase):
         self.assertNotRegex(md, r"(?<!\\)<img")  # only the escaped \<img, which renders as text
         self.assertIn(r"\<img", md)
 
+    def test_renderer_rechecks_link_schemes(self):
+        from dataclasses import replace
+        sneaky = replace(sample_item(1, source="gdelt-aljazeera", title="Sneaky"), url="javascript:alert(1)")
+        self.store.save_items([sneaky])
+        page, md = self.build()
+        self.assertIn("Sneaky", page)
+        self.assertNotIn("javascript:", page)
+        self.assertNotIn("javascript:", md)
+
+    def test_no_temp_files_left_behind(self):
+        self.build()
+        self.assertEqual(list(self.out.glob("*.tmp")), [])
+
     def test_self_contained_with_a_matching_csp(self):
         page, _ = self.build()
         self.assertNotRegex(page, r"(?i)<(link|img|iframe|object|embed)\b")
@@ -89,6 +102,11 @@ class ReconBuild(unittest.TestCase):
         self.assertIn("23 Oct", block)
         self.assertNotIn("22 Oct 18:00", block)  # midnight UTC shown as CDMX time would be the day before
         self.assertNotIn("22 Oct 18:00", md)
+
+    def test_mexico_group_says_what_it_is(self):
+        page, _ = self.build()
+        self.assertIn("Mexico (USGS place)", page)
+        self.assertNotIn("World, M4.5+", page)
 
     def test_quakes_last_24h_mexico_first_then_by_magnitude(self):
         self.store.save_items([quake(1, 5.0, 2), quake(2, 6.1, 3), quake(3, 3.9, 1, mx=True),
@@ -153,6 +171,10 @@ class ReconBuild(unittest.TestCase):
         _, md = self.build()
         self.assertIn(r"A \[fake\]\(http://x\) \*bold\*", md)
         self.assertIn("(https://example.org/a_%28b%29)", md)
+
+    def test_markdown_url_backslash_cannot_escape_the_link(self):
+        from worldwatch.recon_md import md_url
+        self.assertEqual(md_url("https://example.org/a\\"), "https://example.org/a%5C")
 
     def test_phone_ready_basics(self):
         page, _ = self.build()

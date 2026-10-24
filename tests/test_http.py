@@ -2,6 +2,7 @@
 
 import http.server
 import threading
+import time
 import unittest
 from unittest import mock
 
@@ -22,6 +23,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif self.path == "/500":
             self.send_response(500)
             self.end_headers()
+        elif self.path == "/short":
+            self.send_response(200)
+            self.send_header("Content-Length", "100")
+            self.end_headers()
+            self.wfile.write(b"only ten b")
+            self.close_connection = True
+        elif self.path == "/drip":
+            self.send_response(200)
+            self.end_headers()
+            for _ in range(20):
+                self.wfile.write(b"." * 70_000)
+                self.wfile.flush()
+                time.sleep(0.05)
         elif self.path == "/big":
             self.send_response(200)
             self.end_headers()
@@ -69,6 +83,16 @@ class FetcherTests(unittest.TestCase):
         with mock.patch.object(ww_http, "MAX_BYTES", 1024):
             with self.assertRaises(FetchError):
                 Fetcher().get(self.base + "/big")
+
+    def test_truncated_body_is_a_fetch_error(self):
+        with self.assertRaises(FetchError):
+            Fetcher().get(self.base + "/short")
+
+    def test_a_dripping_server_hits_the_total_deadline(self):
+        with mock.patch.object(ww_http, "TOTAL_DEADLINE_S", 0.2):
+            with self.assertRaises(FetchError) as caught:
+                Fetcher().get(self.base + "/drip")
+        self.assertIn("deadline", str(caught.exception))
 
     def test_per_host_gap_is_kept(self):
         clock = [100.0]

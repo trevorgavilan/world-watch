@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import re
 
+from .item import clean_url
 from .recon import CREDITS, Recon, local, show_event, show_time
 
 _MD_SPECIAL = re.compile(r"([\\`*_{}\[\]()#+!|<>~])")
@@ -16,12 +17,13 @@ def md_escape(text: str) -> str:
 
 
 def md_url(url: str) -> str:
-    return url.replace("(", "%28").replace(")", "%29").replace(" ", "%20").replace("<", "%3C").replace(">", "%3E")
+    return url.replace("\\", "%5C").replace("(", "%28").replace(")", "%29").replace(" ", "%20").replace("<", "%3C").replace(">", "%3E")
 
 
 def _line(row) -> str:
     title = md_escape(row["title"])
-    head = f"[{title}]({md_url(row['url'])})" if row["url"] else title
+    url = clean_url(row["url"])  # checked again here: the page must not trust the store
+    head = f"[{title}]({md_url(url)})" if url else title
     meta = [row["severity"]] if row["severity"] else []
     meta += [row["source"], f"event {show_event(row)}",
              f"fetched {show_time(row['fetched_at'])}", row["basis"]]
