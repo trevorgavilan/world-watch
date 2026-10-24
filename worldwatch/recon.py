@@ -64,6 +64,7 @@ class Recon:
     now: datetime
     sections: list[Section]
     sources: list[SourceStatus]
+    credits: list[tuple[str, str, str]]  # (source prefix, text, url)
 
 
 def local(moment: datetime) -> datetime:
@@ -96,24 +97,34 @@ def _since(store: Store, source: str, now: datetime, window: timedelta, limit: i
 
 
 def gather(store: Store, collectors: list[Collector], now: datetime) -> Recon:
-    quakes = store.items_between("usgs-quakes", iso_utc(now - QUAKE_WINDOW), iso_utc(now + timedelta(minutes=5)))
-    mexico = sorted((q for q in quakes if q["country"] == "MX"), key=_magnitude, reverse=True)
-    world = sorted((q for q in quakes if q["country"] != "MX"), key=_magnitude, reverse=True)
-    hazards = Section("hazards", "Earthquakes — last 24 h", "Sismos — últimas 24 h", [
-        Group("Mexico (USGS place)", "México (lugar según USGS)", mexico[:QUAKE_LIMIT]),
-        Group("World — M4.5+, and M3.5+ near Mexico", "Mundo — M4.5+, y M3.5+ cerca de México", world[:QUAKE_LIMIT]),
-    ])
-    security = Section("security", "Exploited vulnerabilities — added in 7 days",
-                       "Vulnerabilidades explotadas — añadidas en 7 días", [
-        Group("CISA KEV", "CISA KEV", list(_since(store, "cisa-kev", now, KEV_WINDOW, KEV_LIMIT))),
-    ])
-    news = Section("news", "News — last 24 h", "Noticias — últimas 24 h", [
-        Group("Al Jazeera (English)", "Al Jazeera (inglés)",
-              list(_since(store, "gdelt-aljazeera", now, NEWS_WINDOW, NEWS_LIMIT)), news_lang="en"),
-        Group("Mexican outlets (Spanish)", "Medios mexicanos (español)",
-              list(_since(store, "gdelt-mx", now, NEWS_WINDOW, NEWS_LIMIT)), news_lang="es"),
-    ])
-    return Recon(now, [hazards, security, news], [_status(store, c, now) for c in collectors])
+    """Only sources in the run appear: a parked source leaves no section, no credit, no stale flag."""
+    active = {c.source for c in collectors}
+    sections = []
+    if "usgs-quakes" in active:
+        quakes = store.items_between("usgs-quakes", iso_utc(now - QUAKE_WINDOW), iso_utc(now + timedelta(minutes=5)))
+        mexico = sorted((q for q in quakes if q["country"] == "MX"), key=_magnitude, reverse=True)
+        world = sorted((q for q in quakes if q["country"] != "MX"), key=_magnitude, reverse=True)
+        sections.append(Section("hazards", "Earthquakes — last 24 h", "Sismos — últimas 24 h", [
+            Group("Mexico (USGS place)", "México (lugar según USGS)", mexico[:QUAKE_LIMIT]),
+            Group("World — M4.5+, and M3.5+ near Mexico", "Mundo — M4.5+, y M3.5+ cerca de México",
+                  world[:QUAKE_LIMIT]),
+        ]))
+    if "cisa-kev" in active:
+        sections.append(Section("security", "Exploited vulnerabilities — added in 7 days",
+                                "Vulnerabilidades explotadas — añadidas en 7 días", [
+            Group("CISA KEV", "CISA KEV", list(_since(store, "cisa-kev", now, KEV_WINDOW, KEV_LIMIT))),
+        ]))
+    news = []
+    if "gdelt-aljazeera" in active:
+        news.append(Group("Al Jazeera (English)", "Al Jazeera (inglés)",
+                          list(_since(store, "gdelt-aljazeera", now, NEWS_WINDOW, NEWS_LIMIT)), news_lang="en"))
+    if "gdelt-mx" in active:
+        news.append(Group("Mexican outlets (Spanish)", "Medios mexicanos (español)",
+                          list(_since(store, "gdelt-mx", now, NEWS_WINDOW, NEWS_LIMIT)), news_lang="es"))
+    if news:
+        sections.append(Section("news", "News — last 24 h", "Noticias — últimas 24 h", news))
+    credits = [c for c in CREDITS if any(source.startswith(c[0]) for source in active)]
+    return Recon(now, sections, [_status(store, c, now) for c in collectors], credits)
 
 
 def _status(store: Store, collector: Collector, now: datetime) -> SourceStatus:

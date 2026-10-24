@@ -62,6 +62,8 @@ def decode_json(payload: bytes, source: str) -> object:
 
 
 def all_collectors() -> list[Collector]:
-    from . import cisa_kev, gdelt, usgs
+    """The sources in the run. GDELT is parked (D-16): it refused most calls; its adapter and
+    tests stay, and it returns by adding `*gdelt.COLLECTORS` here."""
+    from . import cisa_kev, usgs
 
-    return [usgs.COLLECTOR, cisa_kev.COLLECTOR, *gdelt.COLLECTORS]
+    return [usgs.COLLECTOR, cisa_kev.COLLECTOR]

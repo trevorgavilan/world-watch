@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 
 from .item import clean_url
-from .recon import CREDITS, Recon, local, show_event, show_time
+from .recon import Recon, local, show_event, show_time
 
 _MD_SPECIAL = re.compile(r"([\\`*_{}\[\]()#+!|<>~])")
 
@@ -54,5 +54,5 @@ def render_md(recon: Recon) -> str:
             line += f" — last error: {md_escape(s.error)}"
         out.append(line)
     out += ["", "Everything here is reported by its source; nothing is inferred (v0 has no model).", ""]
-    out += [f"- [{md_escape(text)}]({url})" for _, text, url in CREDITS]
+    out += [f"- [{md_escape(text)}]({url})" for _, text, url in recon.credits]
     return "\n".join(out) + "\n"

@@ -11,7 +11,7 @@ import hashlib
 from html import escape
 
 from .item import clean_url
-from .recon import CREDITS, Group, Recon, Section, local, show_event, show_time
+from .recon import Group, Recon, Section, local, show_event, show_time
 
 CSS = """
 :root { color-scheme: light dark;
@@ -127,7 +127,7 @@ def _sources(recon: Recon) -> str:
                      f'<div class="meta">{t("last success", "último éxito")}: {when}{flag}</div>{error}</li>')
     credits = "".join(
         f'<li><a href="{escape(url)}" target="_blank" rel="noopener noreferrer">{escape(text)}</a></li>'
-        for _, text, url in CREDITS
+        for _, text, url in recon.credits
     )
     note = t("Everything on this page is reported by its source; nothing is inferred (v0 has no model).",
              "Todo en esta página lo reporta su fuente; nada es inferido (v0 no usa modelo).")

@@ -153,6 +153,17 @@ class ReconBuild(unittest.TestCase):
         self.assertNotRegex(status, r"usgs-quakes[^\n]{0,200}stale")
         self.assertIn("stale", md)
 
+    def test_parked_sources_leave_no_trace(self):
+        self.store.save_items([sample_item(1, source="gdelt-mx", title="Old headline", lang="es")])
+        html_path, md_path = recon.build(self.store, SOURCES[:2], NOW, self.out)  # GDELT parked
+        page, md = html_path.read_text(encoding="utf-8"), md_path.read_text(encoding="utf-8")
+        for text in (page, md):
+            self.assertNotIn("gdelt", text)
+            self.assertNotIn("Old headline", text)
+            self.assertIn("U.S. Geological Survey", text)
+        self.assertNotIn('id="news"', page)
+        self.assertNotIn('data-news-lang="', page)  # the toggle script names it; no element carries it
+
     def test_empty_store_still_builds(self):
         page, md = self.build()
         self.assertIn("Nothing yet", page)
