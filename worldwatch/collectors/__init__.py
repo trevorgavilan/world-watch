@@ -9,6 +9,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Callable
 
 from ..http import RateLimited
@@ -37,12 +38,18 @@ class Collector:
     url_for: Callable[[datetime | None, datetime], list[str]] | None = None
     layer: Layer | None = None  # how the source shows on the Board (views.py); None: not on the globe
     panel: Panel | None = None
+    # (payload, its URL, last good fetch, now) -> more URLs for the same run: the next page of a paged
+    # API, or the records a listing names. Each must answer too, or the run fails and the mark stays.
+    follow: Callable[[bytes, str, datetime | None, datetime], list[str]] | None = None
+    decode: Callable[[bytes, str], object] | None = None  # (payload, source) -> data; JSON when None
+    # (store, now) -> Items worked out from what is already stored, instead of fetching (the watchlist).
+    derive: Callable[[object, datetime], list[Item]] | None = None
 
     def fetch_urls(self, last_ok: datetime | None, now: datetime) -> list[str]:
         return list(self.url_for(last_ok, now)) if self.url_for else [self.url]
 
     def parse(self, payload: bytes, fetched_at: datetime) -> list[Item]:
-        data = decode_json(payload, self.source)
+        data = (self.decode or decode_json)(payload, self.source)
         items: list[Item] = []
         skipped = 0
         for build in self.parse_records(data, fetched_at):
@@ -70,9 +77,12 @@ def decode_json(payload: bytes, source: str) -> object:
         raise ParseError(f"{source}: not JSON ({text[:80]!r})") from err
 
 
-def all_collectors() -> list[Collector]:
+def all_collectors(base: Path | None = None) -> list[Collector]:
     """The sources in the run. GDELT is parked (D-16): it refused most calls; its adapter and
-    tests stay, and it returns by adding `*gdelt.COLLECTORS` here."""
-    from . import cisa_kev, usgs
+    tests stay, and it returns by adding `*gdelt.COLLECTORS` here. The watchlist alerts come last,
+    so they see what this cycle fetched; their list lives in `<base>/watchlist.txt` (D-20)."""
+    from . import cisa_kev, epss, my_stack, nvd, osv, usgs
 
-    return [usgs.COLLECTOR, cisa_kev.COLLECTOR]
+    watchlist = (base or Path(__file__).resolve().parents[2] / "data") / "watchlist.txt"
+    return [usgs.COLLECTOR, cisa_kev.COLLECTOR, nvd.COLLECTOR, osv.COLLECTOR, epss.COLLECTOR,
+            my_stack.collector(watchlist)]

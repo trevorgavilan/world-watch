@@ -27,11 +27,16 @@ NEWS_WINDOW = timedelta(hours=24)
 QUAKE_LIMIT = 12
 KEV_LIMIT = 15
 NEWS_LIMIT = 10
+ALERT_WINDOW = timedelta(days=7)
+ALERT_LIMIT = 15
 
 CREDITS = [
     ("usgs-quakes", "Credit: U.S. Geological Survey (public domain)", "https://earthquake.usgs.gov/"),
     ("cisa-kev", "CISA Known Exploited Vulnerabilities catalog (CC0 1.0)", "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"),
     ("gdelt", "News lists from the GDELT Project — gdeltproject.org", "https://www.gdeltproject.org/"),
+    ("nvd-cves", "This product uses data from the NVD API but is not endorsed or certified by the NVD.", "https://nvd.nist.gov/"),
+    ("osv-bitnami", "OSV.dev — Bitnami Vulnerability Database (Apache 2.0)", "https://osv.dev/"),
+    ("first-epss", "EPSS by FIRST.org", "https://www.first.org/epss/"),
 ]
 
 
@@ -76,7 +81,7 @@ def show_time(iso: str) -> str:
 
 
 # Sources that give a date, not a moment: shown as that date, never shifted to CDMX time.
-DATE_ONLY_SOURCES = {"cisa-kev"}
+DATE_ONLY_SOURCES = {"cisa-kev", "first-epss", "my-stack"}  # my-stack: dated by its evidence
 
 
 def show_event(row) -> str:
@@ -100,6 +105,11 @@ def gather(store: Store, collectors: list[Collector], now: datetime) -> Recon:
     """Only sources in the run appear: a parked source leaves no section, no credit, no stale flag."""
     active = {c.source for c in collectors}
     sections = []
+    if "my-stack" in active:  # first: the only lines about what Trevor himself runs
+        sections.append(Section("my-stack", "Your stack — alerts, 7 days", "Tu stack — alertas, 7 días", [
+            Group("Matched your watchlist (data/watchlist.txt)", "Coinciden con tu lista (data/watchlist.txt)",
+                  list(_since(store, "my-stack", now, ALERT_WINDOW, ALERT_LIMIT))),
+        ]))
     if "usgs-quakes" in active:
         quakes = store.items_between("usgs-quakes", iso_utc(now - QUAKE_WINDOW), iso_utc(now + timedelta(minutes=5)))
         mexico = sorted((q for q in quakes if q["country"] == "MX"), key=_magnitude, reverse=True)

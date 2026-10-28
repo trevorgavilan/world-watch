@@ -282,7 +282,7 @@ def main(argv: list[str] | None = None) -> int:
     store = None
     try:
         store = Store(base / "worldwatch.sqlite3")
-        return COMMANDS[args.command](store, all_collectors(), base, args)
+        return COMMANDS[args.command](store, all_collectors(base), base, args)
     except KeyboardInterrupt:
         return 130
     except Exception:  # noqa: BLE001 — under pythonw there is no console: the log is the only witness

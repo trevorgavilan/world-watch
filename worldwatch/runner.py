@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Callable
@@ -23,6 +24,7 @@ RETRY_MAX_S = 3600
 RATE_LIMIT_BASE_S = 15 * 60  # told to slow down: 15 min, 30, 60 … up to 6 hours
 RATE_LIMIT_MAX_S = 6 * 3600
 ERROR_MAX = 500
+MAX_URLS_PER_RUN = 300     # a runaway listing or paging loop stops here
 WAKE_GAP_S = 10 * 60        # a tick that took this much longer than asked: the PC slept
 
 
@@ -55,15 +57,32 @@ def is_due(store: Store, collector: Collector, now: datetime) -> bool:
     return next_due <= now or next_due > now + horizon
 
 
+def _fetch_all(collector: Collector, fetcher, last_ok: datetime | None, now: datetime) -> list:
+    """Every URL or nothing: the mark moves only then. A page may name more pages (follow)."""
+    by_id = {}
+    queue = deque(collector.fetch_urls(last_ok, now))
+    fetched = 0
+    while queue:
+        url = queue.popleft()
+        fetched += 1
+        if fetched > MAX_URLS_PER_RUN:
+            raise ParseError(f"{collector.source}: more than {MAX_URLS_PER_RUN} URLs in one run")
+        payload = fetcher.get(url)
+        by_id.update((item.id, item) for item in collector.parse(payload, now))
+        if collector.follow:
+            queue.extend(collector.follow(payload, url, last_ok, now))
+    return list(by_id.values())
+
+
 def run_source(store: Store, collector: Collector, fetcher, now: datetime) -> RunResult:
     state = store.source_state(collector.source)
     fails = state["fail_count"] if state else 0
     try:
         last_ok = parse_iso_utc(state["last_ok_at"]) if state and state["last_ok_at"] else None
-        by_id = {}
-        for url in collector.fetch_urls(last_ok, now):  # every URL or nothing: the mark moves only then
-            by_id.update((item.id, item) for item in collector.parse(fetcher.get(url), now))
-        items = list(by_id.values())
+        if collector.derive:
+            items = collector.derive(store, now)
+        else:
+            items = _fetch_all(collector, fetcher, last_ok, now)
         store.save_items(items)
     except Exception as err:  # noqa: BLE001 — one broken source must never stop the run
         fails += 1

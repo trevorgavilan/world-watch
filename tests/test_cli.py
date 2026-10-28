@@ -89,8 +89,9 @@ class Commands(unittest.TestCase):
         self.assertTrue(held.acquire())
         try:
             with mock.patch.object(cli, "_open") as opened, \
+                 mock.patch.object(cli, "_board_answers", return_value=False), \
                  mock.patch.object(cli.runner, "run_once") as run_once, \
-                 mock.patch.object(cli.runner, "run_loop") as run_loop:
+                 mock.patch.object(cli.runner, "run_loop") as run_loop:  # a real window may hold 8420
                 self.assertEqual(cli.main(["start"]), 2)
             opened.assert_called_once_with(latest)
             run_once.assert_not_called()

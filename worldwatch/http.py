@@ -16,8 +16,9 @@ TOTAL_DEADLINE_S = 120   # for the whole body
 MAX_BYTES = 25 * 1024 * 1024
 CHUNK_BYTES = 64 * 1024
 
-# GDELT asks for at most one request every 5 seconds; leave a margin.
-HOST_MIN_GAP_S = {"api.gdeltproject.org": 6.0}
+# GDELT asks for at most one request every 5 seconds, NIST for six seconds between NVD requests;
+# OSV's bucket states no limit, so a second between record files. Leave a margin.
+HOST_MIN_GAP_S = {"api.gdeltproject.org": 6.0, "services.nvd.nist.gov": 6.5, "storage.googleapis.com": 1.0}
 
 
 class FetchError(Exception):
