@@ -45,7 +45,7 @@ MUTANTS = [
     ("markdown: link syntax not escaped", "worldwatch/recon_md.py",
      r'_MD_SPECIAL = re.compile(r"([\\`*_{}\[\]()#+!|<>~])")', r'_MD_SPECIAL = re.compile(r"([\\`*_#+!|<>~])")'),
     ("recon: date-only KEV shifted to CDMX time", "worldwatch/recon.py",
-     'DATE_ONLY_SOURCES = {"cisa-kev"}', "DATE_ONLY_SOURCES = set()"),
+     'DATE_ONLY_SOURCES = {"cisa-kev", "first-epss", "my-stack"}', 'DATE_ONLY_SOURCES = {"first-epss", "my-stack"}'),
     ("http: 429 not recognised", "worldwatch/http.py",
      "if err.code == 429:", "if err.code == 999:"),
     # D-18: started by World Watch.bat whenever the PC is on — catch up after any gap, say when alive.
@@ -56,7 +56,7 @@ MUTANTS = [
     ("usgs: catch-up window not capped", "worldwatch/collectors/usgs.py",
      "start = max(last_ok - CATCH_UP_MARGIN, now - CATCH_UP_MAX)", "start = last_ok - CATCH_UP_MARGIN"),
     ("runner: last good fetch ignored when choosing the URL", "worldwatch/runner.py",
-     "for url in collector.fetch_urls(last_ok, now):", "for url in [collector.url]:"),
+     "queue = deque(collector.fetch_urls(last_ok, now))", "queue = deque([collector.url])"),
     ("usgs: catch-up asks M3.5+ worldwide (over the query cap)", "worldwatch/collectors/usgs.py",
      '{**common, "minmagnitude": GLOBAL_MIN_MAG},', '{**common, "minmagnitude": MEXICO_MIN_MAG},'),
     ("cli: start leaves the lock held", "worldwatch/cli.py",
