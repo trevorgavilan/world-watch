@@ -241,6 +241,7 @@ class Alerts(StoreCase):
         self.assertTrue(all(i.basis == "inferred" and i.source == "my-stack" for i in items))
         self.assertTrue(all("new vulnerability" in i.title and i.severity == "CVSS 9.2 critical" for i in items))
         self.assertTrue(all("EPSS" not in i.summary for i in items))  # 28 Oct's score is not known on 21 Oct
+        self.assertTrue(all(i.summary.count("CVSS 9.2") == 1 for i in items))
 
     def test_php2shell_day_is_silent_without_php(self):
         self.load(REPLAY_NOW)

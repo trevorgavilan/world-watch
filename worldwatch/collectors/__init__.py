@@ -81,10 +81,11 @@ def decode_json(payload: bytes, source: str) -> object:
 
 def all_collectors(base: Path | None = None) -> list[Collector]:
     """The sources in the run. GDELT is parked (D-16): it refused most calls; its adapter and
-    tests stay, and it returns by adding `*gdelt.COLLECTORS` here. The watchlist alerts come last,
-    so they see what this cycle fetched; their list lives in `<base>/watchlist.txt` (D-20)."""
+    tests stay, and it returns by adding `*gdelt.COLLECTORS` here. The watchlist alerts come first,
+    so they lead the Board (the runner still derives them after the fetches); their list lives in
+    `<base>/watchlist.txt` (D-20)."""
     from . import cisa_kev, epss, my_stack, nvd, osv, usgs
 
     watchlist = (base or Path(__file__).resolve().parents[2] / "data") / "watchlist.txt"
-    return [usgs.COLLECTOR, cisa_kev.COLLECTOR, nvd.COLLECTOR, osv.COLLECTOR, epss.COLLECTOR,
-            my_stack.collector(watchlist)]
+    return [my_stack.collector(watchlist), usgs.COLLECTOR, cisa_kev.COLLECTOR, nvd.COLLECTOR, osv.COLLECTOR,
+            epss.COLLECTOR]

@@ -116,7 +116,8 @@ def run_once(store: Store, collectors: list[Collector], fetcher, now: datetime) 
     """Fetch every due source. A host that says "slow down" defers its other sources too."""
     results: list[RunResult] = []
     blocked_until: dict[str, str] = {}
-    for collector in collectors:
+    # Collectors that derive from the store go last, so they see what this cycle fetched.
+    for collector in sorted(collectors, key=lambda c: c.derive is not None):
         if not is_due(store, collector, now):
             continue
         host = urlsplit(collector.url).hostname or ""

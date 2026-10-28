@@ -128,6 +128,13 @@ def _epss(store, cve: str, now: datetime) -> dict | None:
     return _raw(row) if row else None
 
 
+def _detail(row) -> str:
+    """The advisory's own words: NVD's description (its summary already leads with the CVSS)."""
+    if row["source"] == nvd.SOURCE:
+        return _text(_raw(row).get("description"))[:600]
+    return row["summary"]
+
+
 def _best_cvss(rows) -> tuple[float, str] | None:
     scores = []
     for row in rows:
@@ -147,7 +154,7 @@ def _alerts(store, ev: Evidence, now: datetime) -> list[Alert]:
         facts.append(f"CVSS {cvss[0]:g} {cvss[1]}".strip())
     if score:
         facts.append(f"EPSS {score['epss']:.1%} on {score['date']}")
-    detail = next((r["summary"] for r in ev.published if r["summary"]), "")
+    detail = next((_detail(r) for r in ev.published if _detail(r)), "")
     if ev.exploited is not None and not detail:
         detail = ev.exploited["summary"]
     tail = f' Matched your watchlist entry "{ev.entry}" on {ev.matched}. Sources: {", ".join(sources)}.'
@@ -179,7 +186,7 @@ def _overflow(day: str, hidden: list[Alert], now: datetime) -> Item:
     keys = ", ".join(sorted({a.item.title.split(" — ")[0] for a in hidden})[:20])
     return make_item(
         channel="security", source=SOURCE, native_id=f"overflow/{day}",
-        happened_at=max(parse_iso_utc(a.item.happened_at) for a in hidden), fetched_at=now,
+        happened_at=min(parse_iso_utc(a.item.happened_at) for a in hidden), fetched_at=now,  # below the day's alerts
         title=f"+{len(hidden)} more matches for your stack on {day} (at most {CAP_PER_DAY} alerts a day)",
         url=None, summary=f"Also matched: {keys}.", severity=None, licence=LICENCE,
         raw={"kind": "overflow", "day": day, "count": len(hidden)}, basis="inferred", lang="en",
