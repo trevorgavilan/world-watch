@@ -201,6 +201,111 @@ class Loop(unittest.TestCase):
         self.assertEqual(len(store.runs_since(iso(NOW))), 3)
         store.close()
 
+    def test_heartbeat_says_it_is_alive_once_an_hour(self):
+        store = Store(temp_dir() / "ww.sqlite3")
+        clock = [NOW]
+
+        def sleep(seconds):
+            clock[0] += timedelta(seconds=seconds)
+
+        with self.assertLogs("worldwatch.runner", level="INFO") as logs:
+            runner.run_loop(store, [fake_collector("a", interval_s=7200)], FakeFetcher(), now=lambda: clock[0],
+                            sleep=sleep, tick_s=60, heartbeat_s=3600, stop_at=NOW + timedelta(hours=2, minutes=30),
+                            monotonic=lambda: (clock[0] - NOW).total_seconds())
+        beats = [m for m in logs.output if "still collecting" in m]
+        self.assertEqual(len(beats), 2)
+        self.assertIn("a ", beats[0])  # names each source and when it is next due
+        store.close()
+
+    def test_heartbeat_survives_the_wall_clock_jumping_back(self):
+        store = Store(temp_dir() / "ww.sqlite3")
+        clock = [NOW]
+        ticks = [0.0]
+
+        def sleep(seconds):
+            ticks[0] += seconds
+            clock[0] += timedelta(seconds=seconds)
+            if ticks[0] == 600:
+                clock[0] -= timedelta(hours=5)  # a time sync pulls the wall clock back
+
+        with self.assertLogs("worldwatch.runner", level="INFO") as logs:
+            runner.run_loop(store, [fake_collector("a", interval_s=7200)], FakeFetcher(), now=lambda: clock[0],
+                            sleep=sleep, tick_s=60, heartbeat_s=3600, monotonic=lambda: ticks[0],
+                            stop_at=NOW + timedelta(hours=1, minutes=30))
+        # 6 h 40 min of real time pass before the wall clock reaches stop_at: one beat an hour.
+        # A wall-clock heartbeat would stay silent for 6 h and look exactly like a stall.
+        self.assertEqual(len([m for m in logs.output if "still collecting" in m]), 6)
+        store.close()
+
+    def test_waking_from_sleep_is_logged_and_the_due_source_is_fetched(self):
+        store = Store(temp_dir() / "ww.sqlite3")
+        clock = [NOW]
+        naps = iter([60, 9 * 3600])  # the second tick spans a 9 h sleep of the PC
+
+        def sleep(seconds):
+            clock[0] += timedelta(seconds=next(naps, seconds))
+
+        fetcher = FakeFetcher()
+        with self.assertLogs("worldwatch.runner", level="INFO") as logs:
+            runner.run_loop(store, [fake_collector("a", interval_s=600)], fetcher, now=lambda: clock[0],
+                            sleep=sleep, tick_s=60, stop_at=NOW + timedelta(hours=9, minutes=2))
+        self.assertTrue(any("woke" in m for m in logs.output), logs.output)
+        self.assertEqual(len(fetcher.calls), 2)  # at the start, and on waking
+        store.close()
+
+
+class CatchUp(unittest.TestCase):
+    def setUp(self):
+        self.store = Store(temp_dir() / "ww.sqlite3")
+
+    def tearDown(self):
+        self.store.close()
+
+    def test_the_fetch_url_is_chosen_from_the_last_good_fetch(self):
+        seen = []
+
+        def url_for(last_ok, now):
+            seen.append(last_ok)
+            return ["https://example.org/since"] if last_ok else ["https://example.org/a"]
+
+        a = Collector(source="a", channel="news", url="https://example.org/a", interval_s=600, licence="t",
+                      parse_records=lambda d, f: [], url_for=url_for)
+        fetcher = FakeFetcher({"https://example.org/since": FetchError("down")})
+        runner.run_once(self.store, [a], fetcher, NOW)
+        later = NOW + timedelta(days=10)
+        runner.run_once(self.store, [a], fetcher, later)
+        runner.run_once(self.store, [a], fetcher, later + timedelta(hours=1))
+        self.assertEqual(seen, [None, NOW, NOW])  # a failed catch-up keeps the old mark and tries again
+        self.assertEqual(fetcher.calls, ["https://example.org/a", "https://example.org/since",
+                                         "https://example.org/since"])
+        fetcher.answers.clear()  # the catch-up succeeds: the mark moves to that run
+        third = later + timedelta(hours=2)
+        runner.run_once(self.store, [a], fetcher, third)
+        runner.run_once(self.store, [a], fetcher, third + timedelta(seconds=600))
+        self.assertEqual(seen[-1], third)
+
+    def test_several_urls_count_only_when_all_answer(self):
+        urls = ["https://example.org/world", "https://example.org/mexico"]
+
+        def parse_records(data, fetched_at):
+            return [lambda n=n: sample_item(n, source="a", fetched_at=fetched_at) for n in data["n"]]
+
+        a = Collector(source="a", channel="news", url=urls[0], interval_s=600, licence="t",
+                      parse_records=parse_records, url_for=lambda last_ok, now: urls)
+        fetcher = FakeFetcher({urls[0]: b'{"n": [1, 2]}', urls[1]: FetchError("down")})
+        self.assertFalse(runner.run_once(self.store, [a], fetcher, NOW)[0].ok)
+        self.assertEqual(self.store.count_items(), 0)
+        self.assertIsNone(self.store.source_state("a")["last_ok_at"])
+        fetcher.answers[urls[1]] = b'{"n": [2, 3]}'  # item 2 is in both answers
+        result = runner.run_once(self.store, [a], fetcher, NOW + timedelta(hours=1))[0]
+        self.assertTrue(result.ok)
+        self.assertEqual((result.n_items, self.store.count_items()), (3, 3))
+
+    def test_without_url_for_the_plain_url_is_used(self):
+        fetcher = FakeFetcher()
+        runner.run_once(self.store, [fake_collector("a")], fetcher, NOW)
+        self.assertEqual(fetcher.calls, ["https://example.org/a"])
+
 
 if __name__ == "__main__":
     unittest.main()

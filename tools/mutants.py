@@ -48,6 +48,24 @@ MUTANTS = [
      'DATE_ONLY_SOURCES = {"cisa-kev"}', "DATE_ONLY_SOURCES = set()"),
     ("http: 429 not recognised", "worldwatch/http.py",
      "if err.code == 429:", "if err.code == 999:"),
+    # D-18: started by World Watch.bat whenever the PC is on — catch up after any gap, say when alive.
+    ("usgs: a long gap never catches up", "worldwatch/collectors/usgs.py",
+     "if last_ok is None or now - last_ok <= CATCH_UP_AFTER:", "if True:"),
+    ("usgs: catch-up starts exactly at the last fetch, no overlap", "worldwatch/collectors/usgs.py",
+     "start = max(last_ok - CATCH_UP_MARGIN, now - CATCH_UP_MAX)", "start = max(last_ok, now - CATCH_UP_MAX)"),
+    ("usgs: catch-up window not capped", "worldwatch/collectors/usgs.py",
+     "start = max(last_ok - CATCH_UP_MARGIN, now - CATCH_UP_MAX)", "start = last_ok - CATCH_UP_MARGIN"),
+    ("runner: last good fetch ignored when choosing the URL", "worldwatch/runner.py",
+     "for url in collector.fetch_urls(last_ok, now):", "for url in [collector.url]:"),
+    ("usgs: catch-up asks M3.5+ worldwide (over the query cap)", "worldwatch/collectors/usgs.py",
+     '{**common, "minmagnitude": GLOBAL_MIN_MAG},', '{**common, "minmagnitude": MEXICO_MIN_MAG},'),
+    ("cli: start leaves the lock held", "worldwatch/cli.py",
+     '''        log.info("World Watch stopped")
+        lock.release()''', '''        log.info("World Watch stopped")'''),
+    ("runner: heartbeat never fires", "worldwatch/runner.py",
+     "if heartbeat_s and monotonic() - last_beat >= heartbeat_s:", "if False:"),
+    ("runner: waking from sleep not logged", "worldwatch/runner.py",
+     "if slept > tick_s + WAKE_GAP_S:", "if False:"),
 ]
 
 

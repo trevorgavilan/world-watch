@@ -2,11 +2,12 @@
 
   once            fetch every due source once, then build Recon
   loop [--hours]  keep fetching on each source's interval; rebuild Recon when something arrives
-  logon           what the logon task runs: fetch, build Recon, open it, then loop
+  start           what World Watch.bat runs: catch up, build Recon, open it, then keep collecting
+                  until the window is closed
   recon [--open]  build Recon from what is stored
   status [--hours] per-source runs, failures and the longest gap — the unattended-run evidence
 
-once, loop and logon collect, so only one of them runs at a time (an OS file lock).
+once, loop and start collect, so only one of them runs at a time (an OS file lock).
 """
 
 from __future__ import annotations
@@ -21,13 +22,15 @@ from datetime import datetime, timedelta, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from . import recon, runner
+from . import console, recon, runner
 from .collectors import all_collectors
 from .http import Fetcher
 from .item import iso_utc, parse_iso_utc
 from .store import Store
 
 log = logging.getLogger("worldwatch")
+
+HEARTBEAT_S = 3600  # "still collecting" once an hour: a stall shows in the log
 
 
 def home() -> Path:
@@ -88,7 +91,7 @@ def _now() -> datetime:
 
 def wait_for_network(resolve=socket.getaddrinfo, sleep=time.sleep, attempts: int = 12,
                      pause_s: float = 10, host: str = "earthquake.usgs.gov") -> bool:
-    """At logon the network often isn't up yet: wait (up to ~2 min) until a feed's name resolves.
+    """Just after the PC starts the network often isn't up yet: wait (up to ~2 min) until a feed's name resolves.
     A DNS lookup of a feed we read anyway — nothing is probed."""
     for attempt in range(attempts):
         try:
@@ -117,7 +120,7 @@ def _locked(base: Path) -> SingleInstance | None:
     lock = SingleInstance(base / "worldwatch.lock")
     if lock.acquire():
         return lock
-    log.warning("another World Watch is already collecting (the logon task?); not starting a second one")
+    log.warning("another World Watch is already collecting (another World Watch window?); not starting a second one")
     return None
 
 
@@ -146,28 +149,38 @@ def cmd_loop(store, collectors, base, args) -> int:
     return 0
 
 
-def cmd_logon(store, collectors, base, args) -> int:
+def cmd_start(store, collectors, base, args) -> int:
+    """The PC is switched on at no fixed time: each start catches up on what was missed
+    (a source picks its own catch-up URL from its last good fetch), then keeps collecting."""
     latest = base / "recon" / "recon-latest.html"
     lock = _locked(base)
     if lock is None:
+        print("World Watch is already running in another window; opening the last Recon.")
         if latest.exists():
             _open(latest)
-        return 0
-    if not wait_for_network():
-        log.warning("no network after waiting; building Recon from what is stored")
-    fetcher = Fetcher()
+        return 2
+    log.info("World Watch started (pid %d)", os.getpid())
+    console.setup()
     try:
-        runner.run_once(store, collectors, fetcher, _now())
-    except Exception:  # noqa: BLE001 — still show Recon and keep collecting
-        log.exception("first fetch failed")
-    try:
-        _open(_build_recon(store, collectors, base))
-    except Exception:  # noqa: BLE001
-        log.exception("Recon build failed; opening the last one")
-        if latest.exists():
-            _open(latest)
-    runner.run_loop(store, collectors, fetcher,
-                    after_cycle=lambda results: _build_recon(store, collectors, base))
+        if not wait_for_network():
+            log.warning("no network after waiting; building Recon from what is stored")
+        fetcher = Fetcher()
+        try:
+            runner.run_once(store, collectors, fetcher, _now())
+        except Exception:  # noqa: BLE001 — still show Recon and keep collecting
+            log.exception("first fetch failed")
+        try:
+            _open(_build_recon(store, collectors, base))
+        except Exception:  # noqa: BLE001
+            log.exception("Recon build failed; opening the last one")
+            if latest.exists():
+                _open(latest)
+        log.info("collecting until this window is closed")
+        runner.run_loop(store, collectors, fetcher, heartbeat_s=HEARTBEAT_S,
+                        after_cycle=lambda results: _build_recon(store, collectors, base))
+    finally:
+        log.info("World Watch stopped")
+        lock.release()
     return 0
 
 
@@ -196,7 +209,7 @@ def cmd_status(store, collectors, base, args) -> int:
     return 0
 
 
-COMMANDS = {"once": cmd_once, "loop": cmd_loop, "logon": cmd_logon, "recon": cmd_recon, "status": cmd_status}
+COMMANDS = {"once": cmd_once, "loop": cmd_loop, "start": cmd_start, "recon": cmd_recon, "status": cmd_status}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -206,7 +219,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("once")
     loop = sub.add_parser("loop")
     loop.add_argument("--hours", type=float, default=None)
-    sub.add_parser("logon")
+    sub.add_parser("start")
     rec = sub.add_parser("recon")
     rec.add_argument("--open", action="store_true")
     status = sub.add_parser("status")

@@ -1,16 +1,23 @@
 """USGS earthquakes — the M2.5+ past-week GeoJSON summary feed (updated every minute).
 
 Docs: https://earthquake.usgs.gov/earthquakes/feed/v1.0/geojson.php
+      https://earthquake.usgs.gov/fdsnws/event/1/ (the catalogue query, for catching up)
 Licence: USGS-authored data is US public domain; credit "U.S. Geological Survey".
-A week of history means a PC that was off overnight catches up on its next run.
+The PC is switched on at no fixed time. A week of history covers most gaps; after a longer one
+the catalogue query fetches what `keep` wants since the last good fetch (up to a year), in two
+queries — M4.5+ worldwide and M3.5+ in the Mexico box — each far under the query's 20,000-event
+cap (M3.5+ worldwide was 17,585 for the year to Oct 2026: too close). Catch-up misses only the rare
+sig >= 600 quake under M4.5 outside Mexico. USGS asks automated readers to prefer the feeds, so
+the query is used only for that catch-up.
 Kept: M4.5+ anywhere, anything USGS rates significant (sig >= 600), and M3.5+
 in a box around Mexico.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import partial
+from urllib.parse import urlencode
 
 from ..item import make_item
 from . import Collector, ParseError
@@ -21,6 +28,14 @@ LICENCE = "US public domain (credit: U.S. Geological Survey)"
 GLOBAL_MIN_MAG = 4.5
 SIGNIFICANT_MIN_SIG = 600
 MEXICO_MIN_MAG = 3.5
+WEEK_URL = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.geojson"
+QUERY_URL = "https://earthquake.usgs.gov/fdsnws/event/1/query"
+CATCH_UP_AFTER = timedelta(days=6)     # the week feed, with a day to spare
+# starttime filters on when a quake happened; USGS adds some (regional networks) hours or days
+# late, so overlap the last fetch by a day, as the week feed does. Items are de-duplicated.
+CATCH_UP_MARGIN = timedelta(days=1)
+CATCH_UP_MAX = timedelta(days=365)     # a year: ~7,800 M4.5+ worldwide, ~470 M3.5+ in the box
+
 # lat_min, lat_max, lon_min, lon_max — Mexico plus its coasts; a rough box, not a border.
 MEXICO_BOX = (14.0, 33.0, -118.5, -86.5)
 
@@ -92,11 +107,31 @@ def parse_records(data: object, fetched_at: datetime) -> list:
     return builders
 
 
+def catch_up_queries(start: datetime) -> list[dict]:
+    lat_min, lat_max, lon_min, lon_max = MEXICO_BOX
+    common = {"format": "geojson", "starttime": start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "orderby": "time-asc"}
+    return [
+        {**common, "minmagnitude": GLOBAL_MIN_MAG},  # minmagnitude is inclusive
+        {**common, "minmagnitude": MEXICO_MIN_MAG, "minlatitude": lat_min, "maxlatitude": lat_max,
+         "minlongitude": lon_min, "maxlongitude": lon_max},
+    ]
+
+
+def url_for(last_ok: datetime | None, now: datetime) -> list[str]:
+    """The week feed, unless the last good fetch is older than the feed covers."""
+    if last_ok is None or now - last_ok <= CATCH_UP_AFTER:
+        return [WEEK_URL]
+    start = max(last_ok - CATCH_UP_MARGIN, now - CATCH_UP_MAX)
+    return [QUERY_URL + "?" + urlencode(q) for q in catch_up_queries(start)]
+
+
 COLLECTOR = Collector(
     source=SOURCE,
     channel="hazards",
-    url="https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.geojson",
+    url=WEEK_URL,
     interval_s=15 * 60,
     licence=LICENCE,
     parse_records=parse_records,
+    url_for=url_for,
 )

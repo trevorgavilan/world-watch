@@ -3,30 +3,43 @@
 A private, read-only reader of public feeds that builds **Morning Recon**: one page, phone-ready,
 English and Spanish. Plan and decisions live in the Nematic Vault (`WORLD WATCH HANDOFF`).
 
-**v0 (Task 2):** three keyless sources and a no-model Recon.
+**v0 (Task 2):** keyless sources and a no-model Recon. Nothing runs in the background: you start it.
+
+## Start it
+
+Double-click **`World Watch.bat`** (in this folder). It catches up on whatever happened while the PC
+was off — an hour or a month — builds today's Morning Recon, opens it in the browser, and keeps
+collecting in that window until you close it. Switch the PC on and off whenever you like:
+
+- USGS: the past-week feed normally; after a gap of more than 6 days, the USGS catalogue query
+  fetches what was missed since the last good fetch, with a day of overlap (up to a year back:
+  M4.5+ worldwide and M3.5+ around Mexico). CISA KEV is the whole
+  catalogue every time, so it never misses anything.
+- The window logs "still collecting" once an hour and "woke after …" when the PC comes back from
+  sleep, so a stall shows there and in the log.
+- Double-clicking it again while it runs only reopens the last Recon (one copy collects at a time).
+- Closing the window stops it and logs "World Watch stopped (window closed)"; the store is SQLite
+  in WAL mode, so nothing half-written is kept.
 
 | Source | What | Every | Licence |
 |---|---|---|---|
-| `usgs-quakes` | USGS M2.5+ past-week GeoJSON; keeps M4.5+ anywhere, sig ≥ 600, M3.5+ around Mexico | 15 min | US public domain |
+| `usgs-quakes` | USGS M2.5+ past-week GeoJSON (catalogue query after a longer gap); keeps M4.5+ anywhere, sig ≥ 600, M3.5+ around Mexico | 15 min | US public domain |
 | `cisa-kev` | CISA Known Exploited Vulnerabilities, whole catalogue | 6 h | CC0 1.0 |
-| `gdelt-aljazeera`, `gdelt-mx` | GDELT DOC 2.0 article lists: Al Jazeera (EN), Mexican outlets (ES), last 24 h | 1 h | cite GDELT; headlines and links only |
+| `gdelt-aljazeera`, `gdelt-mx` | **parked (D-16), not in the run:** GDELT DOC 2.0 article lists | 1 h | cite GDELT; headlines and links only |
 
 Standard library only — Python 3.13, nothing to install.
 
-## Run it
+## Other commands
 
 From `D:\TREVOR DATA\world-watch\`:
 
 ```
+python -m worldwatch start         # what World Watch.bat runs
 python -m worldwatch once          # fetch what is due, build Recon
 python -m worldwatch recon --open  # build Recon from what is stored and open it
 python -m worldwatch loop          # keep collecting (Ctrl+C to stop); --hours N to stop after N hours
 python -m worldwatch status        # last 24 h: runs, failures, longest gap per source
 ```
-
-**At logon** the Scheduled Task "World Watch (logon)" runs `pythonw -m worldwatch logon`: it fetches,
-builds today's Recon, opens it in the browser, then keeps collecting until logoff. Only one copy runs.
-Register or remove it with `tools\register-logon-task.ps1` (see the script's header).
 
 Output, all under `data\` (not in git):
 

@@ -23,6 +23,7 @@ RETRY_MAX_S = 3600
 RATE_LIMIT_BASE_S = 15 * 60  # told to slow down: 15 min, 30, 60 … up to 6 hours
 RATE_LIMIT_MAX_S = 6 * 3600
 ERROR_MAX = 500
+WAKE_GAP_S = 10 * 60        # a tick that took this much longer than asked: the PC slept
 
 
 @dataclass(frozen=True)
@@ -58,8 +59,11 @@ def run_source(store: Store, collector: Collector, fetcher, now: datetime) -> Ru
     state = store.source_state(collector.source)
     fails = state["fail_count"] if state else 0
     try:
-        payload = fetcher.get(collector.url)
-        items = collector.parse(payload, now)
+        last_ok = parse_iso_utc(state["last_ok_at"]) if state and state["last_ok_at"] else None
+        by_id = {}
+        for url in collector.fetch_urls(last_ok, now):  # every URL or nothing: the mark moves only then
+            by_id.update((item.id, item) for item in collector.parse(fetcher.get(url), now))
+        items = list(by_id.values())
         store.save_items(items)
     except Exception as err:  # noqa: BLE001 — one broken source must never stop the run
         fails += 1
@@ -101,17 +105,38 @@ def run_once(store: Store, collectors: list[Collector], fetcher, now: datetime) 
     return results
 
 
+def next_due_summary(store: Store, collectors: list[Collector]) -> str:
+    parts = []
+    for c in collectors:
+        state = store.source_state(c.source)
+        due = parse_iso_utc(state["next_due"]).astimezone().strftime("%H:%M") if state else "now"
+        parts.append(f"{c.source} {due}")
+    return ", ".join(parts)
+
+
 def run_loop(store: Store, collectors: list[Collector], fetcher, *,
              after_cycle: Callable[[list[RunResult]], None] | None = None,
              now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
              sleep: Callable[[float], None] = time.sleep,
-             tick_s: float = 60, stop_at: datetime | None = None) -> None:
-    """Run cycles until stop_at (forever when None). after_cycle runs when a source was fetched."""
+             tick_s: float = 60, stop_at: datetime | None = None,
+             heartbeat_s: float | None = None,
+             monotonic: Callable[[], float] = time.monotonic) -> None:
+    """Run cycles until stop_at (forever when None). after_cycle runs when a source was fetched.
+    With heartbeat_s, say "still collecting" that often, so a stall shows in the log. The heartbeat
+    runs on the monotonic clock, so a wall-clock correction can't silence it."""
+    last_beat = monotonic()
     while stop_at is None or now() < stop_at:
         try:
             results = run_once(store, collectors, fetcher, now())
             if results and after_cycle:
                 after_cycle(results)
+            if heartbeat_s and monotonic() - last_beat >= heartbeat_s:
+                last_beat = monotonic()
+                log.info("still collecting; next: %s", next_due_summary(store, collectors))
         except Exception:  # noqa: BLE001 — a locked database or a failed Recon build must not end collection
             log.exception("cycle failed; trying again next tick")
+        before = now()
         sleep(tick_s)
+        slept = (now() - before).total_seconds()
+        if slept > tick_s + WAKE_GAP_S:
+            log.info("woke after %s (or the clock moved); catching up", timedelta(seconds=round(slept)))

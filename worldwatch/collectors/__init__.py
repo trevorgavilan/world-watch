@@ -31,6 +31,12 @@ class Collector:
     interval_s: int
     licence: str
     parse_records: Callable[[object, datetime], list]  # decoded JSON -> builders
+    # (last good fetch or None, now) -> URLs: lets a source catch up after the PC was off for a while.
+    # A run counts only when every URL answered, so a failed catch-up keeps the old mark.
+    url_for: Callable[[datetime | None, datetime], list[str]] | None = None
+
+    def fetch_urls(self, last_ok: datetime | None, now: datetime) -> list[str]:
+        return list(self.url_for(last_ok, now)) if self.url_for else [self.url]
 
     def parse(self, payload: bytes, fetched_at: datetime) -> list[Item]:
         data = decode_json(payload, self.source)

@@ -2,6 +2,8 @@
 
 import json
 import unittest
+from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qs, urlsplit
 
 from tests.helpers import LIVE, NOW, fixture
 from worldwatch.collectors import ParseError, cisa_kev, gdelt, usgs
@@ -84,6 +86,78 @@ class Usgs(unittest.TestCase):
     def test_live(self):
         items = usgs.COLLECTOR.parse(Fetcher().get(usgs.COLLECTOR.url), NOW)
         self.assertGreater(len(items), 0)
+
+
+class UsgsCatchUp(unittest.TestCase):
+    """The PC is switched on whenever Trevor likes: after a gap longer than the week feed covers,
+    the catalogue query fetches everything since the last good fetch."""
+
+    def queries(self, urls):
+        out = []
+        for url in urls:
+            parts = urlsplit(url)
+            self.assertEqual(f"{parts.scheme}://{parts.netloc}{parts.path}", usgs.QUERY_URL)
+            out.append({k: v[0] for k, v in parse_qs(parts.query).items()})
+        return out
+
+    def test_first_run_and_short_gaps_use_the_week_feed(self):
+        self.assertEqual(usgs.COLLECTOR.fetch_urls(None, NOW), [usgs.WEEK_URL])
+        self.assertEqual(usgs.COLLECTOR.fetch_urls(NOW - timedelta(days=2), NOW), [usgs.WEEK_URL])
+        self.assertEqual(usgs.COLLECTOR.fetch_urls(NOW - usgs.CATCH_UP_AFTER, NOW), [usgs.WEEK_URL])
+
+    def test_a_clock_that_ran_ahead_uses_the_week_feed(self):
+        self.assertEqual(usgs.COLLECTOR.fetch_urls(NOW + timedelta(days=30), NOW), [usgs.WEEK_URL])
+
+    def test_a_long_gap_queries_what_keep_wants_from_a_day_before_the_last_fetch(self):
+        last_ok = NOW - timedelta(days=10)
+        world, mexico = self.queries(usgs.COLLECTOR.fetch_urls(last_ok, NOW))
+        self.assertEqual(usgs.CATCH_UP_MARGIN, timedelta(days=1))  # USGS publishes some quakes late
+        for q in (world, mexico):
+            self.assertEqual(q["starttime"], (last_ok - usgs.CATCH_UP_MARGIN).strftime("%Y-%m-%dT%H:%M:%SZ"))
+            self.assertEqual(q["format"], "geojson")
+            self.assertEqual(q["orderby"], "time-asc")
+            self.assertNotIn("endtime", q)
+        self.assertEqual(float(world["minmagnitude"]), usgs.GLOBAL_MIN_MAG)
+        self.assertNotIn("minlatitude", world)
+        self.assertEqual(float(mexico["minmagnitude"]), usgs.MEXICO_MIN_MAG)
+        box = tuple(float(mexico[k]) for k in ("minlatitude", "maxlatitude", "minlongitude", "maxlongitude"))
+        self.assertEqual(box, usgs.MEXICO_BOX)
+
+    def test_just_past_the_week_feed_already_queries(self):
+        urls = usgs.COLLECTOR.fetch_urls(NOW - usgs.CATCH_UP_AFTER - timedelta(minutes=1), NOW)
+        self.assertTrue(all(u.startswith(usgs.QUERY_URL) for u in urls))
+
+    def test_a_very_long_gap_is_capped(self):
+        for q in self.queries(usgs.COLLECTOR.fetch_urls(NOW - timedelta(days=3 * 365), NOW)):
+            self.assertEqual(q["starttime"], (NOW - usgs.CATCH_UP_MAX).strftime("%Y-%m-%dT%H:%M:%SZ"))
+
+    def test_starttime_is_utc_whatever_zone_the_times_carry(self):
+        cdmx = timezone(timedelta(hours=-6))
+        urls = usgs.COLLECTOR.fetch_urls((NOW - timedelta(days=10)).astimezone(cdmx), NOW.astimezone(cdmx))
+        self.assertEqual(self.queries(urls)[0]["starttime"], (NOW - timedelta(days=11)).strftime("%Y-%m-%dT%H:%M:%SZ"))
+
+    def test_saved_query_responses(self):
+        for name in ("usgs_query_global.geojson", "usgs_query_mexico.geojson"):
+            payload = fixture(name)
+            raw = json.loads(payload.decode("utf-8"))
+            items = usgs.COLLECTOR.parse(payload, NOW)
+            self.assertGreater(len(items), 0, name)
+            self.assertEqual(len(items), len(raw["features"]), name)  # each query asks only for what `keep` wants
+            self.assertTrue(all(i.source == "usgs-quakes" for i in items))
+
+    @unittest.skipUnless(LIVE, "set WW_LIVE=1 to hit the live feed")
+    def test_live_query(self):
+        now = datetime.now(timezone.utc)
+        for url in usgs.COLLECTOR.fetch_urls(now - timedelta(days=9), now):
+            self.assertIsInstance(usgs.COLLECTOR.parse(Fetcher().get(url), now), list)
+
+    @unittest.skipUnless(LIVE, "set WW_LIVE=1 to hit the live feed")
+    def test_live_a_full_year_stays_far_under_the_query_cap(self):
+        now = datetime.now(timezone.utc)
+        for url in usgs.COLLECTOR.fetch_urls(now - timedelta(days=3 * 365), now):
+            count_url = url.replace("/query?", "/count?")
+            answer = json.loads(Fetcher().get(count_url).decode("utf-8"))
+            self.assertLess(answer["count"], 0.7 * answer["maxAllowed"], count_url)
 
 
 class Kev(unittest.TestCase):
