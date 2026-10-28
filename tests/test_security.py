@@ -168,8 +168,9 @@ class Epss(unittest.TestCase):
                         b'{"status": "OK", "total": 5, "data": []}'):
             with self.assertRaises(ParseError):
                 epss.COLLECTOR.parse(payload, LATER_NOW)
-        odd = b'{"status": "OK", "data": [{"cve": "CVE-2026-1", "epss": "1.5", "percentile": "0.5", "date": "2026-10-28"}]}'
-        self.assertEqual(epss.COLLECTOR.parse(odd, LATER_NOW), [])
+        row = '{"cve": "CVE-2026-1234", "epss": "%s", "percentile": "0.5", "date": "2026-10-28"}'
+        odd = ('{"status": "OK", "data": [%s, %s]}' % (row % "1.5", row % "0.25")).encode()
+        self.assertEqual([i.severity for i in epss.COLLECTOR.parse(odd, LATER_NOW)], ["EPSS 25.0%"])
 
     def test_the_question_names_no_cve(self):
         self.assertNotIn("cve=", epss.URL)
@@ -288,7 +289,12 @@ class Wiring(StoreCase):
         from worldwatch import runner
 
         class Endless:
+            calls = 0
+
             def get(self, url):
+                Endless.calls += 1
+                if Endless.calls > 2 * runner.MAX_URLS_PER_RUN:  # without the cap: stop the test, not hang
+                    raise RuntimeError("no cap")
                 return b'{"startIndex": 0, "resultsPerPage": 1, "totalResults": 99, "vulnerabilities": []}'
 
         loop = nvd.COLLECTOR.__class__(**{**nvd.COLLECTOR.__dict__, "follow": lambda p, u, l, n: [u]})
