@@ -7,6 +7,11 @@ lists it — the second is news even when the first was already shown. At most C
 day — the evidence's own UTC date, which is also the date the Board and Recon show (KEV gives only
 a date). Once shown an alert stays, on the day it was shown under, and the rest of a day fold into
 one "+N more" line. Every alert is basis "inferred": the match is ours, the facts are the sources'.
+
+Outages come the same way from the official status pages (status_pages.py): one alert per incident
+with some impact (minor or worse) on a service or part whose name is on the watchlist, sharing the
+same daily cap. When a day has more than the cap, the order is: exploited, then major or critical
+outages, then new vulnerabilities (by EPSS, then CVSS), then minor outages.
 """
 
 from __future__ import annotations
@@ -21,17 +26,20 @@ from pathlib import Path
 from .. import watchlist
 from ..item import Item, item_id, iso_utc, make_item, parse_iso_utc
 from ..views import Panel
-from . import Collector, cisa_kev, epss, nvd, osv
+from . import Collector, cisa_kev, epss, nvd, osv, status_pages
 
 log = logging.getLogger(__name__)
 
 SOURCE = "my-stack"
-LICENCE = "worked out here from NVD (public domain), OSV.dev, CISA KEV (CC0) and EPSS (FIRST) data"
+LICENCE = ("worked out here from NVD (public domain), OSV.dev, CISA KEV (CC0) and EPSS (FIRST) data, "
+           "and the services' own status pages")
 LOOKBACK = timedelta(days=30)
 CAP_PER_DAY = 5
 FUTURE_SLACK = timedelta(minutes=5)
 SCAN_LIMIT = 100_000
-NEW, EXPLOITED = "new", "exploited"
+NEW, EXPLOITED, OUTAGE = "new", "exploited", "outage"
+# Which alerts win a crowded day: a higher tier first (exploited 3, big outage 2, new CVE 1, small outage 0).
+OUTAGE_WEIGHT = {"minor": 0.5, "major": 0.75, "critical": 1.0}  # impact "none" raises no alert
 
 
 @dataclass
@@ -178,7 +186,37 @@ def _alerts(store, ev: Evidence, now: datetime) -> list[Alert]:
             severity="exploited" if stage == EXPLOITED else (facts[0] if facts else None),
             licence=LICENCE, raw=raw, basis="inferred", lang="en",
         )
-        out.append(Alert(item, _day(item.happened_at), (stage == EXPLOITED, *base_rank)))
+        out.append(Alert(item, _day(item.happened_at), (3 if stage == EXPLOITED else 1, *base_rank)))
+    return out
+
+
+def _outage_alerts(store, entries, now: datetime) -> list[Alert]:
+    """One alert per status-page incident that names a watched service or part of one."""
+    out = []
+    for source in status_pages.SOURCES:
+        for row in _rows(store, source, now):
+            data = _raw(row)
+            impact = data.get("impact")
+            if data.get("kind") != "incident" or impact not in OUTAGE_WEIGHT:
+                continue
+            hit = _match(entries, data.get("names"))
+            if not hit:
+                continue
+            entry, matched = hit
+            key = f"{source}/{_text(data.get('id')) or row['id']}"
+            item = make_item(
+                channel="status", source=SOURCE, native_id=f"{key}/{OUTAGE}",
+                happened_at=parse_iso_utc(row["happened_at"]), fetched_at=now,
+                title=f"{entry} · {row['title']} ({impact} impact, {_text(data.get('status')) or 'open'})",
+                url=row["url"], summary=f'{row["summary"]} Matched your watchlist entry "{entry}" on {matched}.'
+                                        f" Source: {source}.",
+                severity=row["severity"], licence=LICENCE,
+                raw={"kind": "alert", "key": key, "stage": OUTAGE, "entry": entry, "matched": matched,
+                     "sources": [source], "impact": impact},
+                basis="inferred", lang="en",
+            )
+            tier = 2 if impact in ("major", "critical") else 0
+            out.append(Alert(item, _day(item.happened_at), (tier, OUTAGE_WEIGHT[impact], 0.0)))
     return out
 
 
@@ -199,6 +237,7 @@ def derive(store, now: datetime, path: Path) -> list[Item]:
         log.debug("%s: no watchlist entries in %s; no alerts", SOURCE, path)
         return []
     alerts = [a for ev in gather(store, entries, now).values() for a in _alerts(store, ev, now)]
+    alerts += _outage_alerts(store, entries, now)
     shown: dict[str, str] = {}  # alert id -> the time it was shown under (its day never moves)
     shown_per_day: dict[str, int] = {}
     for row in store.items_between(SOURCE, iso_utc(now - LOOKBACK - timedelta(days=1)),  # frozen times run early

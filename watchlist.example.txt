@@ -10,3 +10,7 @@ Python = cpython
 # CISA's exploited list calls most Windows bugs just "Microsoft Windows": the last name catches those.
 Windows 11 = windows 11*, microsoft windows 11*, microsoft windows
 Chrome = google chrome, chromium*
+# Services: their official status pages raise outage alerts (a part alone works too: GitHub Pages).
+GitHub
+Claude = anthropic claude
+Google Workspace = gmail, google drive

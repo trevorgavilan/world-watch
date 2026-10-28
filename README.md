@@ -36,6 +36,8 @@ collecting in that window until you close it. Switch the PC on and off whenever 
 | `nvd-cves` | NVD CVE API 2.0: CVEs *published* since the last run (3 h overlap; 7 days on a first run, 30 at most), every page | 2 h | US public domain; "This product uses data from the NVD API but is not endorsed or certified by the NVD." |
 | `osv-bitnami` | OSV.dev bulk files, Bitnami ecosystem: `modified_id.csv`, then each record changed since the last run (≤ 200) | 6 h | Apache 2.0 (Bitnami via OSV) |
 | `first-epss` | FIRST EPSS: CVEs first scored in the last 30 days with EPSS ≥ 10 % | 12 h | FIRST: freely and openly accessible |
+| `github-status`, `cloudflare-status`, `claude-status` | the official Statuspage feeds (`<page>/api/v2/incidents.json`): the 50 most recent incidents, with impact and affected parts | 15 min | none stated: shown with a link to the incident |
+| `google-workspace-status` | Google Workspace Status Dashboard, its documented `incidents.json` | 15 min | none stated: shown with a link to the incident |
 | `my-stack` | **nothing fetched:** alerts worked out from the above against `data\watchlist.txt` | 15 min | — |
 | `gdelt-aljazeera`, `gdelt-mx` | **parked (D-16), not in the run:** GDELT DOC 2.0 article lists | 1 h | cite GDELT; headlines and links only |
 
@@ -45,8 +47,8 @@ Standard library only — Python 3.13, nothing to install.
 
 `data\watchlist.txt` (not in git, never sent anywhere) lists, one per line, the things you use:
 a name, and after `=` any other names it goes by. Copy `watchlist.example.txt` to start. World Watch
-reads public advisories (NVD, OSV, CISA KEV, EPSS) and checks whether they **name** one of these
-products; it never contacts, scans or logs into anything on the list, and no request depends on it.
+reads public advisories (NVD, OSV, CISA KEV, EPSS) and official status pages (GitHub, Cloudflare,
+Claude, Google Workspace) and checks whether they **name** one of these products or services; it never contacts, scans or logs into anything on the list, and no request depends on it.
 
 - A name matches an advisory's product, or "vendor product", exactly — case and punctuation aside.
   `PHP` matches PHP Group's PHP, not phpMyFAQ. A `*` at the end also takes more words:
@@ -56,8 +58,12 @@ products; it never contacts, scans or logs into anything on the list, and no req
   **exploited** (CISA KEV listed it). At most 5 a day; the rest fold into one "+N more" line, and an
   alert once shown stays. They appear on the Board ("Your stack — alerts") and at the top of Recon,
   marked *inferred*: the match is World Watch's, the facts are the sources'.
-- Services with no software of yours to patch (a bank, Carrd, Google accounts) rarely appear in
-  CVE feeds; their outages and breach notices are a later channel (status pages, Task 3's parked part).
+- **Outages:** a status-page incident with some impact (minor or worse) alerts when its service or
+  an affected part is on the list: `GitHub` takes every GitHub incident, `GitHub Pages` only those
+  naming Pages; `Claude` (or `Anthropic = claude`), `Cloudflare`, `Google Workspace`, `Gmail`,
+  `Google Drive` work the same way. Incidents share the 5 a day; a crowded day keeps exploited
+  bugs first, then major or critical outages, then new vulnerabilities, then minor outages.
+- Carrd, Meta and banks publish no status feed World Watch can read, so they can't alert yet.
 
 ## Other commands
 

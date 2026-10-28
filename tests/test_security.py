@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, urlsplit
 from tests.helpers import LIVE, fixture, temp_dir
 from worldwatch import watchlist
 from worldwatch.board.data import Registry, panel_entries
-from worldwatch.collectors import ParseError, all_collectors, cisa_kev, epss, my_stack, nvd, osv
+from worldwatch.collectors import ParseError, all_collectors, cisa_kev, epss, my_stack, nvd, osv, status_pages
 from worldwatch.http import Fetcher
 from worldwatch.runner import run_once
 from worldwatch.store import Store
@@ -218,7 +218,8 @@ class Watchlist(unittest.TestCase):
         from pathlib import Path
         with self.assertNoLogs("worldwatch.watchlist", level="WARNING"):
             entries = watchlist.load(Path(__file__).resolve().parent.parent / "watchlist.example.txt")
-        self.assertEqual([e.name for e in entries], ["PHP", "Python", "Windows 11", "Chrome"])
+        self.assertEqual([e.name for e in entries], ["PHP", "Python", "Windows 11", "Chrome", "GitHub", "Claude",
+                                                   "Google Workspace"])
         win = entries[2]
         self.assertTrue(win.matches("Microsoft", "Windows"))  # how KEV names most Windows bugs
         self.assertIsNone(win.matches("Microsoft", "Windows Server 2019"))
@@ -321,6 +322,10 @@ class Wiring(StoreCase):
             "services.nvd.nist.gov": gz("nvd_pub_2026-10-21.json.gz"),
             "www.cisa.gov": fixture("cisa_kev.json"),
             "api.first.org": fixture("epss_recent.json"),
+            "www.githubstatus.com": gz("statuspage_github_2026-10-28.json.gz"),
+            "www.cloudflarestatus.com": gz("statuspage_cloudflare_2026-10-28.json.gz"),
+            "status.claude.com": gz("statuspage_claude_2026-10-28.json.gz"),
+            "www.google.com": gz("google_workspace_2026-10-28.json.gz"),
         }
 
         class Fake:
@@ -338,7 +343,8 @@ class Wiring(StoreCase):
         self.assertTrue(all(r.ok for r in results), results)
         # Fixed questions only: no URL depends on the watchlist, and my-stack fetched nothing.
         self.assertEqual(set(requested), {nvd.url_for(None, REPLAY_NOW)[0], cisa_kev.COLLECTOR.url, epss.URL,
-                                          osv.LISTING, f"{osv.BUCKET}/Bitnami/BIT-php-2026-109618.json"})
+                                          osv.LISTING, f"{osv.BUCKET}/Bitnami/BIT-php-2026-109618.json",
+                                          *(c.url for c in status_pages.COLLECTORS)})
         self.assertFalse(any("secret" in u.lower() for u in requested))
         board = panel_entries(self.store, Registry(collectors).panel("my-stack"), REPLAY_NOW)
         self.assertEqual({e["title"].split(" · ")[1].split(" — ")[0] for e in board["entries"]}, PHP2SHELL)
