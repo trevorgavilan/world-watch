@@ -193,6 +193,15 @@ class Watchlist(unittest.TestCase):
         self.assertIsNone(win.matches("Microsoft", "Windows 110"))
         self.assertEqual(len(bad.terms), 1)  # "w*" too short, "a*b" not a name: only "bad" itself
 
+    def test_the_example_file_reads_cleanly(self):
+        from pathlib import Path
+        with self.assertNoLogs("worldwatch.watchlist", level="WARNING"):
+            entries = watchlist.load(Path(__file__).resolve().parent.parent / "watchlist.example.txt")
+        self.assertEqual([e.name for e in entries], ["PHP", "Python", "Windows 11", "Chrome"])
+        win = entries[2]
+        self.assertTrue(win.matches("Microsoft", "Windows"))  # how KEV names most Windows bugs
+        self.assertIsNone(win.matches("Microsoft", "Windows Server 2019"))
+
     def test_a_missing_or_oversized_file_means_no_entries(self):
         d = temp_dir()
         self.assertEqual(watchlist.load(d / "none.txt"), [])

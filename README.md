@@ -33,9 +33,31 @@ collecting in that window until you close it. Switch the PC on and off whenever 
 |---|---|---|---|
 | `usgs-quakes` | USGS M2.5+ past-week GeoJSON (catalogue query after a longer gap); keeps M4.5+ anywhere, sig ≥ 600, M3.5+ around Mexico | 15 min | US public domain |
 | `cisa-kev` | CISA Known Exploited Vulnerabilities, whole catalogue | 6 h | CC0 1.0 |
+| `nvd-cves` | NVD CVE API 2.0: CVEs *published* since the last run (3 h overlap; 7 days on a first run, 30 at most), every page | 2 h | US public domain; "This product uses data from the NVD API but is not endorsed or certified by the NVD." |
+| `osv-bitnami` | OSV.dev bulk files, Bitnami ecosystem: `modified_id.csv`, then each record changed since the last run (≤ 200) | 6 h | Apache 2.0 (Bitnami via OSV) |
+| `first-epss` | FIRST EPSS: CVEs first scored in the last 30 days with EPSS ≥ 10 % | 12 h | FIRST: freely and openly accessible |
+| `my-stack` | **nothing fetched:** alerts worked out from the above against `data\watchlist.txt` | 15 min | — |
 | `gdelt-aljazeera`, `gdelt-mx` | **parked (D-16), not in the run:** GDELT DOC 2.0 article lists | 1 h | cite GDELT; headlines and links only |
 
 Standard library only — Python 3.13, nothing to install.
+
+## My stack — the watchlist
+
+`data\watchlist.txt` (not in git, never sent anywhere) lists, one per line, the things you use:
+a name, and after `=` any other names it goes by. Copy `watchlist.example.txt` to start. World Watch
+reads public advisories (NVD, OSV, CISA KEV, EPSS) and checks whether they **name** one of these
+products; it never contacts, scans or logs into anything on the list, and no request depends on it.
+
+- A name matches an advisory's product, or "vendor product", exactly — case and punctuation aside.
+  `PHP` matches PHP Group's PHP, not phpMyFAQ. A `*` at the end also takes more words:
+  `windows 11*` matches "Windows 11 Version 24H2", not "Windows 110".
+- A vendor alone matches nothing: `Google` is not Chrome. Write `google chrome` or `chromium*`.
+- An alert is one vulnerability at one stage: **new** (NVD or OSV published it) and later
+  **exploited** (CISA KEV listed it). At most 5 a day; the rest fold into one "+N more" line, and an
+  alert once shown stays. They appear on the Board ("Your stack — alerts") and at the top of Recon,
+  marked *inferred*: the match is World Watch's, the facts are the sources'.
+- Services with no software of yours to patch (a bank, Carrd, Google accounts) rarely appear in
+  CVE feeds; their outages and breach notices are a later channel (status pages, Task 3's parked part).
 
 ## Other commands
 

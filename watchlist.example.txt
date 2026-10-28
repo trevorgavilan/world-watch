@@ -1,0 +1,12 @@
+# My stack — copy this file to data\watchlist.txt and edit it there (data\ is never in git).
+#
+# One line per thing you use:   Name = other names it goes by, comma-separated (optional)
+# A name matches an advisory's product exactly (case and punctuation aside); a '*' at the end
+# also matches longer names starting with those words. Lines starting with '#' are notes.
+# World Watch only reads public advisories and checks for these names; nothing here is sent anywhere.
+
+PHP
+Python = cpython
+# CISA's exploited list calls most Windows bugs just "Microsoft Windows": the last name catches those.
+Windows 11 = windows 11*, microsoft windows 11*, microsoft windows
+Chrome = google chrome, chromium*
