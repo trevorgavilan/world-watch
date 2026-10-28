@@ -207,7 +207,8 @@ def _outage_alerts(store, entries, now: datetime) -> list[Alert]:
             item = make_item(
                 channel="status", source=SOURCE, native_id=f"{key}/{OUTAGE}",
                 happened_at=parse_iso_utc(row["happened_at"]), fetched_at=now,
-                title=f"{entry} · {row['title']} ({impact} impact, {_text(data.get('status')) or 'open'})",
+                title=f"{entry} · {row['title'].replace(' — ', ': ', 1)} — {impact} impact,"
+                      f" {_text(data.get('status')) or 'open'}",
                 url=row["url"], summary=f'{row["summary"]} Matched your watchlist entry "{entry}" on {matched}.'
                                         f" Source: {source}.",
                 severity=row["severity"], licence=LICENCE,
@@ -256,7 +257,7 @@ def derive(store, now: datetime, path: Path) -> list[Item]:
     for day, group in sorted(by_day.items()):
         room = CAP_PER_DAY - shown_per_day.get(day, 0)
         hidden = []
-        for alert in sorted(group, key=lambda a: (a.rank, a.item.id), reverse=True):
+        for alert in sorted(group, key=lambda a: (a.rank, a.item.happened_at, a.item.id), reverse=True):
             if room > 0:
                 items.append(alert.item)
                 room -= 1

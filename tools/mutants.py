@@ -126,6 +126,36 @@ MUTANTS = [
      "        if collector.derive:\n", "        if False:\n"),
     ("alerts: an odd advisory field stops every alert", "worldwatch/watchlist.py",
      "if not isinstance(product, str) or not isinstance(vendor, (str, type(None))):", "if not product:"),
+    # Task 3b: status-page outages — safe links, honest state, exact names, the shared cap.
+    ("status: incident ids not checked before they become links", "worldwatch/collectors/status_pages.py",
+     "if not isinstance(native, str) or not INCIDENT_ID.fullmatch(native):", "if not isinstance(native, str):"),
+    ("status: the feed's own link is trusted", "worldwatch/collectors/status_pages.py",
+     'url=f"{page}/incidents/{native}"', 'url=incident.get("shortlink")'),
+    ("status: an open incident is called resolved", "worldwatch/collectors/status_pages.py",
+     'state = "resolved" if ended else (status or "open")', 'state = "resolved"'),
+    ("status: the fetch time, not when it began", "worldwatch/collectors/status_pages.py",
+     'began=incident.get("started_at") or incident.get("created_at")', "began=fetched_at.isoformat()"),
+    ("status: the oldest update shown as the newest", "worldwatch/collectors/status_pages.py",
+     "newest = max(updates,", "newest = min(updates,"),
+    ("status: affected parts ignored", "worldwatch/collectors/status_pages.py",
+     'parts = [c.get("name") for c in incident.get("components") or [] if isinstance(c, dict)]', "parts = []"),
+    ("status: a part loses its service's name (Copilot, not GitHub Copilot)", "worldwatch/collectors/status_pages.py",
+     'else f"{product} {part}"', "else part"),
+    ("google: an outage read as no impact", "worldwatch/collectors/status_pages.py",
+     '"SERVICE_OUTAGE": "major"', '"SERVICE_OUTAGE": "none"'),
+    ("alerts: an incident with no impact alerts", "worldwatch/collectors/my_stack.py",
+     'OUTAGE_WEIGHT = {"minor": 0.5,', 'OUTAGE_WEIGHT = {"none": 0.1, "minor": 0.5,'),
+    ("alerts: every incident alerts, watchlist or not", "worldwatch/collectors/my_stack.py",
+     'hit = _match(entries, data.get("names"))\n            if not hit:\n                continue\n',
+     'hit = _match(entries, data.get("names")) or (entries[0].name, "anything")\n'),
+    ("alerts: an outage replay sees later incidents", "worldwatch/collectors/my_stack.py",
+     "        for row in _rows(store, source, now):", '        for row in store.items_between(source, "", "9999", limit=SCAN_LIMIT):'),
+    ("alerts: outages get a cap of their own", "worldwatch/collectors/my_stack.py",
+     "out.append(Alert(item, _day(item.happened_at), (tier,", 'out.append(Alert(item, "outages", (tier,'),
+    ("alerts: a big outage ranks below new vulnerabilities", "worldwatch/collectors/my_stack.py",
+     'tier = 2 if impact in ("major", "critical") else 0', "tier = 0"),
+    ("wiring: the status pages are not in the run", "worldwatch/collectors/__init__.py",
+     "epss.COLLECTOR, *status_pages.COLLECTORS]", "epss.COLLECTOR]"),
 ]
 
 
@@ -134,20 +164,30 @@ def run_one(name: str, rel: str, old: str, new: str) -> bool:
         work = Path(tmp)
         shutil.copytree(ROOT / "worldwatch", work / "worldwatch")
         shutil.copytree(ROOT / "tests", work / "tests")
+        shutil.copy2(ROOT / "watchlist.example.txt", work / "watchlist.example.txt")  # a test reads it
+        if not rel:  # the baseline: the untouched copy must pass, or "caught" means nothing
+            return _suite_fails(work)
         target = work / rel
         text = target.read_text(encoding="utf-8")
         if text.count(old) != 1:
             print(f"  BROKEN MUTANT  {name}: pattern found {text.count(old)} times")
             return False
         target.write_text(text.replace(old, new), encoding="utf-8")
-        result = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
-                                cwd=work, capture_output=True, text=True, timeout=300)
-        caught = result.returncode != 0
+        caught = _suite_fails(work)
         print(f"  {'caught ' if caught else 'MISSED '}  {name}")
         return caught
 
 
+def _suite_fails(work: Path) -> bool:
+    result = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
+                            cwd=work, capture_output=True, text=True, timeout=300)
+    return result.returncode != 0
+
+
 def main() -> int:
+    if run_one("baseline", "", "", ""):
+        print("  the untouched copy fails its own tests: fix that before trusting any mutant")
+        return 1
     results = [run_one(*m) for m in MUTANTS]
     print(f"{sum(results)}/{len(results)} mutants caught")
     return 0 if all(results) else 1

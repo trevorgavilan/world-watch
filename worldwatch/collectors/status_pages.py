@@ -30,7 +30,7 @@ from . import Collector, ParseError
 IMPACTS = ("none", "minor", "major", "critical")
 GOOGLE_IMPACT = {"SERVICE_INFORMATION": "none", "SERVICE_DISRUPTION": "minor", "SERVICE_OUTAGE": "major"}
 INCIDENT_ID = re.compile(r"[A-Za-z0-9]{6,40}")  # goes into the link: never trust it raw
-MAX_NAMES = 30
+MAX_NAMES = 100  # Cloudflare lists dozens of data centres before the products
 UPDATE_CHARS = 600
 INTERVAL_S = 15 * 60
 LICENCE = "{}'s public status page (no licence stated; shown with a link to the incident)"
@@ -61,14 +61,39 @@ def _pair(vendor: str, name: str) -> list[str]:
         else [vendor, name]
 
 
-def _names(vendor: str, product: str, parts: list) -> list[list[str]]:
-    """The service itself, then each affected part under the service's vendor."""
+def _qualified(product: str, part: str) -> str:
+    """A status page's section under its service's name: "Pages" is "GitHub Pages", "Access" is
+    "Cloudflare Access" (never Microsoft Access); "Claude Code" already says whose it is."""
+    named, service = watchlist.norm(part), watchlist.norm(product)
+    return part if named == service or named.startswith(service + " ") else f"{product} {part}"
+
+
+def _names(vendor: str, product: str, parts: list, *, qualify: bool) -> list[list[str]]:
+    """The service itself, then each affected part: Statuspage's sections under the service's name
+    (qualify), Google's products as Google names them (Gmail, Google Drive)."""
     names = [_pair(vendor, product)]
     for part in parts:
-        pair = _pair(vendor, _text(part)) if _text(part) else None
-        if pair and pair not in names:
+        if not _text(part):
+            continue
+        pair = _pair(vendor, _qualified(product, _text(part)) if qualify else _text(part))
+        if pair not in names:
             names.append(pair)
     return names[:MAX_NAMES]
+
+
+def _when(value: object) -> datetime:
+    """For ordering updates: an odd time sorts first instead of failing the incident."""
+    try:
+        return _time(value)
+    except (InvalidItem, ValueError):
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _incident_id(incident: dict) -> str:
+    native = incident["id"]
+    if not isinstance(native, str) or not INCIDENT_ID.fullmatch(native):
+        raise InvalidItem(f"bad incident id {native!r}")
+    return native
 
 
 def _incident_item(*, source, service, native_id, url, began, ended, impact, status, title, names,
@@ -90,17 +115,15 @@ def _incident_item(*, source, service, native_id, url, began, ended, impact, sta
 # --- Atlassian Statuspage --------------------------------------------------------------------
 
 def _statuspage_build(incident: dict, fetched_at: datetime, *, source, service, vendor, product, page):
-    native = incident["id"]
-    if not isinstance(native, str) or not INCIDENT_ID.fullmatch(native):
-        raise InvalidItem(f"bad incident id {native!r}")
+    native = _incident_id(incident)
     updates = [u for u in incident.get("incident_updates") or [] if isinstance(u, dict)]
-    newest = max(updates, key=lambda u: _text(u.get("created_at")), default={})
+    newest = max(updates, key=lambda u: _when(u.get("created_at")), default={})
     parts = [c.get("name") for c in incident.get("components") or [] if isinstance(c, dict)]
     return _incident_item(
         source=source, service=service, native_id=native, url=f"{page}/incidents/{native}",
         began=incident.get("started_at") or incident.get("created_at"), ended=incident.get("resolved_at"),
         impact=incident.get("impact"), status=_text(incident.get("status")), title=_text(incident.get("name")),
-        names=_names(vendor, product, parts), update=_text(newest.get("body"))[:UPDATE_CHARS],
+        names=_names(vendor, product, parts, qualify=True), update=_text(newest.get("body"))[:UPDATE_CHARS],
         fetched_at=fetched_at,
     )
 
@@ -128,10 +151,15 @@ GOOGLE_SOURCE = "google-workspace-status"
 GOOGLE_PAGE = "https://www.google.com/appsstatus/dashboard"
 
 
+def _google_title(incident: dict, products: list) -> str:
+    named = _text(incident.get("service_name"))
+    if named and named != "Multiple Products":
+        return named
+    return ", ".join(p for p in map(_text, products[:4]) if p) or named or "incident"
+
+
 def _google_build(incident: dict, fetched_at: datetime):
-    native = incident["id"]
-    if not isinstance(native, str) or not INCIDENT_ID.fullmatch(native):
-        raise InvalidItem(f"bad incident id {native!r}")
+    native = _incident_id(incident)
     products = [p.get("title") for p in incident.get("affected_products") or [] if isinstance(p, dict)]
     newest = incident.get("most_recent_update") if isinstance(incident.get("most_recent_update"), dict) else {}
     summary = _text(newest.get("text")) or _text(incident.get("external_desc"))
@@ -139,8 +167,8 @@ def _google_build(incident: dict, fetched_at: datetime):
         source=GOOGLE_SOURCE, service="Google Workspace", native_id=native,
         url=f"{GOOGLE_PAGE}/incidents/{native}", began=incident.get("begin"), ended=incident.get("end"),
         impact=GOOGLE_IMPACT.get(incident.get("status_impact")), status=_text(newest.get("status")).lower().replace("_", " "),
-        title=_text(incident.get("service_name")) or "incident",
-        names=_names("Google", "Google Workspace", products), update=summary[:UPDATE_CHARS],
+        title=_google_title(incident, products),
+        names=_names("Google", "Google Workspace", products, qualify=False), update=summary[:UPDATE_CHARS],
         fetched_at=fetched_at,
     )
 

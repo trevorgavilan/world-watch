@@ -59,7 +59,7 @@ class Statuspage(unittest.TestCase):
         raw = json.loads(pages.raw)
         self.assertEqual(raw["status"], "resolved")
         self.assertEqual(raw["names"][0], ["", "GitHub"])
-        self.assertIn(["GitHub", "Pages"], raw["names"])
+        self.assertIn(["", "GitHub Pages"], raw["names"])  # a section under its service's name
         self.assertTrue(pages.summary.startswith("GitHub: critical impact, resolved."))
 
     def test_saved_cloudflare_and_claude_feeds(self):
@@ -87,6 +87,13 @@ class Statuspage(unittest.TestCase):
         self.assertIsNone(json.loads(item.raw)["ended"])
         self.assertIn("major impact, investigating. We are investigating.", item.summary)
 
+    def test_the_newest_update_by_time_not_by_spelling(self):
+        item = status_pages.GITHUB.parse(json.dumps({"incidents": [incident(incident_updates=[
+            {"created_at": "2026-10-19T10:00:00-07:00", "body": "newest (17:00 UTC)"},
+            {"created_at": "2026-10-19T16:00:00Z", "body": "older"},
+            {"created_at": "garbage", "body": "odd"}])]}).encode(), FETCHED)[0]
+        self.assertIn("newest (17:00 UTC)", item.summary)
+
     def test_not_the_documented_shape_is_a_parse_error(self):
         for payload in (b"[]", b'{"incidents": {}}', b"<html>"):
             with self.assertRaises(ParseError):
@@ -112,6 +119,10 @@ class GoogleWorkspace(unittest.TestCase):
         drive = next(i for i in items if ["", "Google Drive"] in json.loads(i.raw)["names"])
         self.assertTrue(drive.title.startswith("Google Workspace — "))
 
+    def test_several_products_are_named_not_multiple_products(self):
+        multi = next(i for i in parsed(status_pages.GOOGLE) if "Gmail, Google Calendar" in i.title)
+        self.assertTrue(multi.title.startswith("Google Workspace — Gmail, Google Calendar, Google Chat"), multi.title)
+
     def test_not_a_list_is_a_parse_error(self):
         with self.assertRaises(ParseError):
             status_pages.GOOGLE.parse(b'{"incidents": []}', FETCHED)
@@ -128,8 +139,8 @@ class OutageAlerts(StoreCase):
         alert = next(i for i in with_it if PAGES_OUTAGE in json.loads(i.raw)["key"])
         self.assertEqual(alert.happened_at, "2026-10-19T15:49:25Z")
         self.assertEqual(alert.url, f"https://www.githubstatus.com/incidents/{PAGES_OUTAGE}")
-        self.assertTrue(alert.title.startswith("GitHub · GitHub — Degraded availability"), alert.title)
-        self.assertIn("(critical impact, resolved)", alert.title)
+        self.assertEqual(alert.title, "GitHub · GitHub: Degraded availability for GitHub Actions, GitHub Pages and"
+                                      " Webhooks — critical impact, resolved")
         self.assertIn('Matched your watchlist entry "GitHub" on GitHub.', alert.summary)
         self.assertEqual(alert.basis, "inferred")
         self.assertEqual(self.derive(NO_PHP, PAGES_DAY), [])
@@ -144,6 +155,28 @@ class OutageAlerts(StoreCase):
         self.assertIn("169pg72gg9jr", everything)  # 28 Sep, Copilot Code Review: no Pages in it
         self.assertNotIn("169pg72gg9jr", alert_keys(pages_only))
         self.assertLess(alert_keys(pages_only), everything)
+
+    def test_a_generic_section_name_is_not_someone_elses_product(self):
+        now = datetime(2026, 10, 28, 23, 0, tzinfo=timezone.utc)
+        self.pages(status_pages.GITHUB, now)
+        self.pages(status_pages.CLOUDFLARE, now)
+        # Microsoft Copilot and Microsoft Access are not GitHub's Copilot or Cloudflare's Access.
+        self.assertEqual(self.derive("Copilot\nAccess\nPages\n", now), [])
+        self.assertTrue(alert_keys(self.derive("GitHub Copilot\n", now)))
+        self.assertTrue(alert_keys(self.derive("Cloudflare Access\n", now)))
+
+    def test_an_open_incident_alert_keeps_its_day_when_it_resolves(self):
+        now = datetime(2026, 10, 19, 17, 0, tzinfo=timezone.utc)
+        open_ = incident(status="investigating", resolved_at=None)
+        self.store.save_items(status_pages.GITHUB.parse(json.dumps({"incidents": [open_]}).encode(), now))
+        first = self.derive("GitHub Pages\n", now, save=True)
+        self.assertEqual(len(first), 1)
+        self.assertTrue(first[0].title.endswith("major impact, investigating"), first[0].title)
+        later = now + timedelta(hours=2)
+        self.store.save_items(status_pages.GITHUB.parse(json.dumps({"incidents": [incident()]}).encode(), later))
+        again = self.derive("GitHub Pages\n", later)
+        self.assertEqual([(i.id, i.happened_at) for i in again], [(first[0].id, first[0].happened_at)])
+        self.assertTrue(again[0].title.endswith("major impact, resolved"))
 
     def test_claude_and_google_names(self):
         now = datetime(2026, 9, 26, 5, 0, tzinfo=timezone.utc)
