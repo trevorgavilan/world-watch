@@ -82,6 +82,16 @@ class Store:
             self.db.executescript(SCHEMA)
             self.db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
+    @classmethod
+    def open_readonly(cls, path: Path) -> Store:
+        """For the Board: SQLite itself refuses every write on this connection (no schema setup either)."""
+        if not path.exists():
+            raise FileNotFoundError(path)
+        store = cls.__new__(cls)
+        store.db = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=30)
+        store.db.row_factory = sqlite3.Row
+        return store
+
     def close(self) -> None:
         self.db.close()
 
@@ -97,11 +107,13 @@ class Store:
         return self.db.execute("SELECT COUNT(*) FROM items").fetchone()[0]
 
     def items_between(self, source: str, start: str, end: str, *, limit: int = 1000,
-                      order: str = "happened_at DESC") -> list[sqlite3.Row]:
+                      order: str = "happened_at DESC", positioned: bool = False) -> list[sqlite3.Row]:
+        """positioned: only items with a position on the map (the Board's layers)."""
         if order not in ("happened_at DESC", "happened_at ASC"):
             raise ValueError("unsupported order")
+        where_pos = "AND lat BETWEEN -90 AND 90 AND lon BETWEEN -180 AND 180 " if positioned else ""
         return self.db.execute(
-            f"SELECT * FROM items WHERE source = ? AND happened_at >= ? AND happened_at < ? "
+            f"SELECT * FROM items WHERE source = ? AND happened_at >= ? AND happened_at < ? {where_pos}"
             f"ORDER BY {order}, id LIMIT ?",
             (source, start, end, limit),
         ).fetchall()

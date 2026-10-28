@@ -3,7 +3,9 @@
 A private, read-only reader of public feeds that builds **Morning Recon**: one page, phone-ready,
 English and Spanish. Plan and decisions live in the Nematic Vault (`WORLD WATCH HANDOFF`).
 
-**v0 (Task 2):** keyless sources and a no-model Recon. Nothing runs in the background: you start it.
+**v0 (Task 2, 2b):** keyless sources, a no-model Recon, and the **Board** — a globe with the quakes
+layer, the KEV panel and a freshness bar per source, at `http://127.0.0.1:8420/`. Nothing runs in
+the background: you start it.
 
 ## Start it
 
@@ -18,6 +20,12 @@ collecting in that window until you close it. Switch the PC on and off whenever 
 - The window logs "still collecting" once an hour and "woke after …" when the PC comes back from
   sleep, so a stall shows there and in the log.
 - Double-clicking it again while it runs only reopens the last Recon (one copy collects at a time).
+- The Board runs inside that same window: it opens in the browser once the catch-up is done, reads
+  only the local store (read-only), and refreshes every minute. It listens on 127.0.0.1:8420 only
+  and answers only to its own name (127.0.0.1 or localhost); no route writes; the page loads
+  nothing from the internet (globe.gl and the NASA image are vendored in `worldwatch/board/static/vendor/`
+  with their checksums). If port 8420 is taken, World Watch still collects and opens Recon instead.
+  Morning Recon is one click away (top right), or at `/recon`.
 - Closing the window stops it and logs "World Watch stopped (window closed)"; the store is SQLite
   in WAL mode, so nothing half-written is kept.
 
@@ -66,6 +74,11 @@ python tools\mutants.py                                # planted bugs: all must 
 - `worldwatch/runner.py` — per-source intervals; failures back off (2 min doubling to 1 h; 429: 15 min doubling to 6 h)
   and never stop the other sources.
 - `worldwatch/recon*.py` — Recon: self-contained HTML (strict CSP, no outside requests) and its Markdown twin.
+- `worldwatch/views.py` — how a source shows on the Board: a `Layer` (points on the globe) and/or a
+  `Panel` (a list), registered on the source's own `Collector` (`layer=`, `panel=`). Adding a source's
+  layer or panel touches no Board code.
+- `worldwatch/board/` — the Board: `server.py` (127.0.0.1 only, Host check, GET/HEAD only, strict CSP,
+  a fixed list of static files), `data.py` (the read-only answers), `static/` (page, script, vendored files).
 
 Rules that are not optional: public feeds only, no scanning of anyone (D-7); every item shows its
 source, event time, fetch time and licence, and says whether it is reported or inferred (D-8);

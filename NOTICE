@@ -6,7 +6,14 @@ Files copied or closely ported from other projects are listed here with their li
 A file ported from World Monitor is AGPL-3.0 ("Based on World Monitor", with a link);
 anything lifted from God's Eye View keeps its MIT copyright line.
 
-Listed files: none yet.
+Listed files:
+
+- worldwatch/board/static/vendor/globe.gl-2.46.2.min.js — globe.gl 2.46.2, MIT, Copyright (c) 2019
+  Vasco Asturiano (licence beside it); it bundles three.js (MIT, Copyright 2010-2026 three.js authors)
+  and its other MIT/ISC dependencies, whose notices are kept inside the file.
+
+Imagery: worldwatch/board/static/vendor/earth-blue-marble-5400x2700.jpg — NASA Blue Marble: Next
+Generation (NASA Earth Observatory), US public domain.
 
 Data credits (not code): U.S. Geological Survey (public domain); CISA KEV (CC0 1.0);
 the GDELT Project (https://www.gdeltproject.org/). Each stored item carries its source's licence.

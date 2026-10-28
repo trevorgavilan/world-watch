@@ -9,10 +9,11 @@ The whole catalogue (~1,800 entries) comes each time; storing is an upsert.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import partial
 
 from ..item import InvalidItem, make_item
+from ..views import Panel
 from . import Collector, ParseError
 
 SOURCE = "cisa-kev"
@@ -64,4 +65,6 @@ COLLECTOR = Collector(
     interval_s=6 * 3600,
     licence=LICENCE,
     parse_records=parse_records,
+    panel=Panel(id="kev", en="Known exploited vulnerabilities", es="Vulnerabilidades explotadas",
+                window=timedelta(days=30), limit=50, date_only=True),
 )

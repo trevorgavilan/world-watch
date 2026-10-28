@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>World Watch Board</title>
+<link rel="stylesheet" href="/static/board.css">
+<script src="/static/globe.gl.min.js" defer></script>
+<script src="/static/board.js" defer></script>
+</head>
+<body>
+<header class="bar">
+  <h1>World Watch</h1>
+  <ul id="fresh" class="fresh" aria-label="Sources and when each was last fetched"></ul>
+  <a class="recon" href="/recon">Morning Recon</a>
+</header>
+<main class="board">
+  <section id="globe" class="globe" aria-label="Globe"></section>
+  <aside class="side">
+    <section class="box">
+      <h2>Layers · Capas</h2>
+      <ul id="layers" class="layers"></ul>
+    </section>
+    <section id="picked" class="box picked" hidden>
+      <h2>Selected · Seleccionado</h2>
+      <div id="picked-body"></div>
+    </section>
+    <div id="panels"></div>
+  </aside>
+</main>
+<footer class="foot">
+  <p id="status" role="status"></p>
+  <ul id="credits" class="credits"></ul>
+</footer>
+</body>
+</html>

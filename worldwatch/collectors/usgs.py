@@ -20,6 +20,7 @@ from functools import partial
 from urllib.parse import urlencode
 
 from ..item import make_item
+from ..views import Layer
 from . import Collector, ParseError
 
 SOURCE = "usgs-quakes"
@@ -126,6 +127,22 @@ def url_for(last_ok: datetime | None, now: datetime) -> list[str]:
     return [QUERY_URL + "?" + urlencode(q) for q in catch_up_queries(start)]
 
 
+def magnitude(row) -> float | None:
+    """From the stored severity ("M4.7" or "M6.1 · PAGER yellow")."""
+    try:
+        return float((row["severity"] or "").split()[0][1:])
+    except (ValueError, IndexError):
+        return None
+
+
+def weight(row) -> float:
+    """M2.5 -> 0, M8.0 and up -> 1; an unknown magnitude shows small."""
+    mag = magnitude(row)
+    if mag is None:
+        return 0.0
+    return min(max((mag - 2.5) / 5.5, 0.0), 1.0)
+
+
 COLLECTOR = Collector(
     source=SOURCE,
     channel="hazards",
@@ -134,4 +151,5 @@ COLLECTOR = Collector(
     licence=LICENCE,
     parse_records=parse_records,
     url_for=url_for,
+    layer=Layer(id="quakes", en="Earthquakes", es="Sismos", window=timedelta(days=7), limit=2000, weight=weight),
 )

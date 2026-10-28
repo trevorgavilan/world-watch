@@ -1,6 +1,8 @@
 import logging
 import os
+import socket
 import unittest
+import urllib.request
 from pathlib import Path
 from unittest import mock
 
@@ -28,6 +30,9 @@ class Commands(unittest.TestCase):
         self.addCleanup(patcher.stop)
         self.addCleanup(logging.getLogger().handlers.clear)
         logging.getLogger().handlers.clear()
+        port = mock.patch.object(cli, "BOARD_PORT", 0)  # a free port: never the real Board's 8420
+        port.start()
+        self.addCleanup(port.stop)
 
     def test_once_and_loop_refuse_while_another_copy_runs(self):
         held = cli.SingleInstance(self.home / "worldwatch.lock")
@@ -92,6 +97,47 @@ class Commands(unittest.TestCase):
             run_loop.assert_not_called()
         finally:
             held.release()
+
+    def test_a_second_start_opens_the_running_board(self):
+        held = cli.SingleInstance(self.home / "worldwatch.lock")
+        self.assertTrue(held.acquire())
+        try:
+            with mock.patch.object(cli, "_board_answers", return_value=True),                  mock.patch.object(cli, "_open") as opened,                  mock.patch.object(cli.runner, "run_loop") as run_loop:
+                self.assertEqual(cli.main(["start"]), 2)
+            opened.assert_called_once_with(cli.board_url(cli.REAL_BOARD_PORT))
+            run_loop.assert_not_called()
+        finally:
+            held.release()
+
+    def test_start_serves_the_board_while_collecting_and_stops_it_on_close(self):
+        seen = {}
+
+        def loop(*args, **kwargs):  # while collecting: the Board answers from the store
+            url = seen["opened"]
+            seen["status"] = urllib.request.urlopen(url + "api/board", timeout=10).status
+            seen["port"] = int(url.rsplit(":", 1)[1].strip("/"))
+
+        with mock.patch.object(cli, "wait_for_network", return_value=True),              mock.patch.object(cli.runner, "run_once", return_value=[]),              mock.patch.object(cli, "_open", side_effect=lambda target: seen.setdefault("opened", target)),              mock.patch.object(cli.runner, "run_loop", side_effect=loop):
+            self.assertEqual(cli.main(["start"]), 0)
+        self.assertTrue(str(seen["opened"]).startswith("http://127.0.0.1:"), "opens the Board, not Recon")
+        self.assertEqual(seen["status"], 200)
+        with self.assertRaises(OSError, msg="the Board kept running after the window closed"):
+            socket.create_connection(("127.0.0.1", seen["port"]), timeout=2).close()
+        log_text = (self.home / "logs" / "worldwatch.log").read_text(encoding="utf-8")
+        self.assertIn("Board at http://127.0.0.1:", log_text)
+
+    def test_start_still_collects_when_a_source_registers_a_bad_board_id(self):
+        with mock.patch.object(cli.board_server, "make_server", side_effect=ValueError("id taken")),              mock.patch.object(cli, "wait_for_network", return_value=True),              mock.patch.object(cli.runner, "run_once", return_value=[]),              mock.patch.object(cli, "_open") as opened,              mock.patch.object(cli.runner, "run_loop") as run_loop:
+            self.assertEqual(cli.main(["start"]), 0)
+        run_loop.assert_called_once()
+        self.assertTrue(str(opened.call_args.args[0]).endswith(".html"))
+
+    def test_start_still_collects_and_opens_recon_when_the_port_is_taken(self):
+        with mock.patch.object(cli.board_server, "make_server", side_effect=OSError("address in use")),              mock.patch.object(cli, "wait_for_network", return_value=True),              mock.patch.object(cli.runner, "run_once", return_value=[]),              mock.patch.object(cli, "_open") as opened,              mock.patch.object(cli.runner, "run_loop") as run_loop:
+            self.assertEqual(cli.main(["start"]), 0)
+        run_loop.assert_called_once()
+        self.assertTrue(str(opened.call_args.args[0]).endswith(".html"))
+        self.assert_lock_free()
 
 
 class Console(unittest.TestCase):

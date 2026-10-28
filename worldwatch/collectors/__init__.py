@@ -13,6 +13,7 @@ from typing import Callable
 
 from ..http import RateLimited
 from ..item import Item
+from ..views import Layer, Panel
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +35,8 @@ class Collector:
     # (last good fetch or None, now) -> URLs: lets a source catch up after the PC was off for a while.
     # A run counts only when every URL answered, so a failed catch-up keeps the old mark.
     url_for: Callable[[datetime | None, datetime], list[str]] | None = None
+    layer: Layer | None = None  # how the source shows on the Board (views.py); None: not on the globe
+    panel: Panel | None = None
 
     def fetch_urls(self, last_ok: datetime | None, now: datetime) -> list[str]:
         return list(self.url_for(last_ok, now)) if self.url_for else [self.url]

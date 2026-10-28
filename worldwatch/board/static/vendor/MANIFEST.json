@@ -1,0 +1,20 @@
+{
+  "globe.gl-2.46.2.min.js": {
+    "version": "globe.gl 2.46.2 (dist/globe.gl.min.js; three.js bundled inside)",
+    "source": "https://registry.npmjs.org/globe.gl/-/globe.gl-2.46.2.tgz (npm integrity sha512-oh5fx/sTVtFa06OrLXxgfZ5TV1xhDzLKw0muc0fxJfpHrvfDNRspGqrgURpEBBYWS7REzQA78vodUrjbpfYoqA== checked 2026-10-28)",
+    "licence": "MIT (globe.gl-2.46.2.LICENSE.txt; three.js MIT)",
+    "sha256": "2c3e445c04d121215910a89688b96091c8a72071c122a4f830081a39b636c94c"
+  },
+  "globe.gl-2.46.2.LICENSE.txt": {
+    "version": "globe.gl 2.46.2 (package/LICENSE)",
+    "source": "the same npm tarball",
+    "licence": "MIT",
+    "sha256": "c633a0da18abe4208665d9faf574f38084bbe38ce5bf743e9ecc06e50b941b59"
+  },
+  "earth-blue-marble-5400x2700.jpg": {
+    "version": "NASA Blue Marble: Next Generation, topography and bathymetry, December 2004, 5400x2700",
+    "source": "https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73909/world.topo.bathy.200412.3x5400x2700.jpg (NASA Visible Earth, downloaded 2026-10-28)",
+    "licence": "NASA imagery, US public domain (credit: NASA Earth Observatory)",
+    "sha256": "a9f0088972dee0254610af851c4d6838ca3f2cf79176987e0a5713e2c15ec042"
+  }
+}

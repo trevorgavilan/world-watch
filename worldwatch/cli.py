@@ -2,8 +2,8 @@
 
   once            fetch every due source once, then build Recon
   loop [--hours]  keep fetching on each source's interval; rebuild Recon when something arrives
-  start           what World Watch.bat runs: catch up, build Recon, open it, then keep collecting
-                  until the window is closed
+  start           what World Watch.bat runs: serve the Board on 127.0.0.1, catch up, build Recon,
+                  open the Board, then keep collecting until the window is closed (which stops both)
   recon [--open]  build Recon from what is stored
   status [--hours] per-source runs, failures and the longest gap — the unattended-run evidence
 
@@ -17,12 +17,14 @@ import logging
 import os
 import socket
 import sys
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from . import console, recon, runner
+from .board import server as board_server
 from .collectors import all_collectors
 from .http import Fetcher
 from .item import iso_utc, parse_iso_utc
@@ -31,6 +33,8 @@ from .store import Store
 log = logging.getLogger("worldwatch")
 
 HEARTBEAT_S = 3600  # "still collecting" once an hour: a stall shows in the log
+REAL_BOARD_PORT = board_server.BOARD_PORT
+BOARD_PORT = REAL_BOARD_PORT  # the tests move it to a free port
 
 
 def home() -> Path:
@@ -109,11 +113,46 @@ def _build_recon(store: Store, collectors, base: Path) -> Path:
     return html_path
 
 
-def _open(path: Path) -> None:
+def _open(target: Path | str) -> None:
+    """A file we wrote, or the Board's own 127.0.0.1 address."""
     if hasattr(os, "startfile"):
-        os.startfile(path)  # noqa: S606 — our own generated file
+        os.startfile(str(target))  # noqa: S606 — our own file or our own local page
     else:
-        log.info("open it: %s", path)
+        log.info("open it: %s", target)
+
+
+def board_url(port: int) -> str:
+    return f"http://{board_server.BOARD_HOST}:{port}/"
+
+
+def _start_board(store_path: Path, collectors, recon_dir: Path):
+    """A thread of this process (D-18): it ends when the window closes. None if it cannot listen."""
+    try:
+        srv = board_server.make_server(store_path, collectors, recon_dir, port=BOARD_PORT)
+    except OSError as err:
+        log.warning("Board not started (port %d in use?): %s — opening Recon instead", BOARD_PORT, err)
+        return None
+    except ValueError:  # a source registered a bad or duplicate layer/panel id: still collect
+        log.exception("Board not started — opening Recon instead")
+        return None
+    threading.Thread(target=srv.serve_forever, name="board", daemon=True).start()
+    log.info("Board at %s", board_url(srv.server_port))
+    return srv
+
+
+def _stop_board(srv) -> None:
+    if srv is not None:
+        srv.shutdown()
+        srv.server_close()
+
+
+def _board_answers(port: int) -> bool:
+    """Is the other window's Board up? A connect to our own loopback port, nothing else."""
+    try:
+        socket.create_connection((board_server.BOARD_HOST, port), timeout=1).close()
+        return True
+    except OSError:
+        return False
 
 
 def _locked(base: Path) -> SingleInstance | None:
@@ -155,12 +194,17 @@ def cmd_start(store, collectors, base, args) -> int:
     latest = base / "recon" / "recon-latest.html"
     lock = _locked(base)
     if lock is None:
-        print("World Watch is already running in another window; opening the last Recon.")
-        if latest.exists():
-            _open(latest)
+        if _board_answers(REAL_BOARD_PORT):
+            print("World Watch is already running in another window; opening its Board.")
+            _open(board_url(REAL_BOARD_PORT))
+        else:
+            print("World Watch is already running in another window; opening the last Recon.")
+            if latest.exists():
+                _open(latest)
         return 2
     log.info("World Watch started (pid %d)", os.getpid())
     console.setup()
+    board = _start_board(base / "worldwatch.sqlite3", collectors, base / "recon")
     try:
         if not wait_for_network():
             log.warning("no network after waiting; building Recon from what is stored")
@@ -170,15 +214,19 @@ def cmd_start(store, collectors, base, args) -> int:
         except Exception:  # noqa: BLE001 — still show Recon and keep collecting
             log.exception("first fetch failed")
         try:
-            _open(_build_recon(store, collectors, base))
+            recon_path = _build_recon(store, collectors, base)
         except Exception:  # noqa: BLE001
-            log.exception("Recon build failed; opening the last one")
-            if latest.exists():
-                _open(latest)
+            log.exception("Recon build failed")
+            recon_path = latest if latest.exists() else None
+        if board is not None:
+            _open(board_url(board.server_port))
+        elif recon_path is not None:
+            _open(recon_path)
         log.info("collecting until this window is closed")
         runner.run_loop(store, collectors, fetcher, heartbeat_s=HEARTBEAT_S,
                         after_cycle=lambda results: _build_recon(store, collectors, base))
     finally:
+        _stop_board(board)
         log.info("World Watch stopped")
         lock.release()
     return 0

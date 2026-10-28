@@ -2,3 +2,5 @@ tests/fixtures/** -text
 *.py text eol=lf
 *.md text eol=lf
 *.bat text eol=crlf
+# Vendored files are pinned by checksum: never convert their line endings.
+worldwatch/board/static/vendor/** -text
