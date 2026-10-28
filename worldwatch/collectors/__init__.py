@@ -41,6 +41,8 @@ class Collector:
     # (payload, its URL, last good fetch, now) -> more URLs for the same run: the next page of a paged
     # API, or the records a listing names. Each must answer too, or the run fails and the mark stays.
     follow: Callable[[bytes, str, datetime | None, datetime], list[str]] | None = None
+    follow_optional: bool = False  # a follow-up that fails is skipped and logged (one bad record of many)
+    min_retry_s: int = 0  # never retry sooner than this after a failure (NVD: two hours)
     decode: Callable[[bytes, str], object] | None = None  # (payload, source) -> data; JSON when None
     # (store, now) -> Items worked out from what is already stored, instead of fetching (the watchlist).
     derive: Callable[[object, datetime], list[Item]] | None = None

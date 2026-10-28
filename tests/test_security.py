@@ -101,11 +101,32 @@ class Nvd(unittest.TestCase):
         self.assertEqual(len(nxt), 1)
         self.assertEqual(parse_qs(urlsplit(nxt[0]).query)["startIndex"], ["2000"])
         self.assertEqual(parse_qs(urlsplit(nxt[0]).query)["pubStartDate"], parse_qs(urlsplit(url).query)["pubStartDate"])
-        last = b'{"startIndex": 4000, "resultsPerPage": 500, "totalResults": 4500, "vulnerabilities": []}'
-        self.assertEqual(nvd.follow(last, url, None, LATER_NOW), [])
-        huge = b'{"startIndex": 38000, "resultsPerPage": 2000, "totalResults": 90000, "vulnerabilities": []}'
+        last = b'{"startIndex": 0, "resultsPerPage": 500, "totalResults": 4500, "vulnerabilities": []}'
+        self.assertEqual(nvd.follow(last, url.replace("startIndex=0", "startIndex=4000"), None, LATER_NOW), [])
+        # The page's own startIndex is not trusted: one stuck at 0 still moves on.
+        stuck = b'{"startIndex": 0, "resultsPerPage": 2000, "totalResults": 4500, "vulnerabilities": []}'
+        self.assertIn("startIndex=4000", nvd.follow(stuck, nxt[0], None, LATER_NOW)[0])
+        huge = b'{"startIndex": 0, "resultsPerPage": 2000, "totalResults": 90000, "vulnerabilities": []}'
         with self.assertRaises(ParseError):
-            nvd.follow(huge, url, None, LATER_NOW)
+            nvd.follow(huge, url.replace("startIndex=0", "startIndex=38000"), None, LATER_NOW)
+        empty = b'{"startIndex": 0, "resultsPerPage": 0, "totalResults": 10, "vulnerabilities": []}'
+        with self.assertRaises(ParseError):  # an empty page before the end is not "done"
+            nvd.follow(empty, url, None, LATER_NOW)
+
+    def test_a_failure_waits_two_hours(self):
+        from worldwatch.http import FetchError
+        from worldwatch.item import parse_iso_utc
+
+        class Down:
+            def get(self, url):
+                raise FetchError("HTTP 503 from services.nvd.nist.gov")
+
+        store = Store(temp_dir() / "t.sqlite3")
+        self.addCleanup(store.close)
+        from worldwatch.runner import run_source
+        self.assertFalse(run_source(store, nvd.COLLECTOR, Down(), LATER_NOW).ok)
+        next_due = parse_iso_utc(store.source_state(nvd.SOURCE)["next_due"])
+        self.assertGreaterEqual(next_due - LATER_NOW, timedelta(hours=2))
 
     @unittest.skipUnless(LIVE, "live")
     def test_live(self):
@@ -258,10 +279,37 @@ class Alerts(StoreCase):
         self.assertEqual(len(alerts), my_stack.CAP_PER_DAY)
         self.assertEqual(len(overflow), 1)
         self.assertTrue(overflow[0].title.startswith(f"+{19 - my_stack.CAP_PER_DAY} more"))
-        # Shown alerts stay shown; a later, bigger match that day does not push one out.
-        again = self.derive("Roundcube = roundcube webmail\nPHP\n", REPLAY_NOW)
-        self.assertEqual({i.id for i in again if " · " in i.title}, {i.id for i in alerts})
-        self.assertIn(f"+{19 - my_stack.CAP_PER_DAY + 2} more", next(i.title for i in again if i.title.startswith("+")))
+        # All 19 were published on 22 Oct (UTC), the date the Board shows; PHP2Shell on 21 Oct.
+        self.assertEqual({i.happened_at[:10] for i in first}, {"2026-10-22"})
+        # Shown alerts stay shown; more matches that day (Apache bRPC, many critical) never push one out.
+        again = self.derive("Roundcube = roundcube webmail\nApache bRPC\nPHP\n", REPLAY_NOW, save=True)
+        on_22 = [i for i in again if " · " in i.title and i.happened_at.startswith("2026-10-22")]
+        self.assertEqual({i.id for i in on_22}, {i.id for i in alerts})
+        more = next(i.title for i in again if i.title.startswith("+"))
+        self.assertGreater(int(more[1:].split()[0]), 19 - my_stack.CAP_PER_DAY)
+        self.assertLessEqual(PHP2SHELL, keys(i for i in again if i.happened_at.startswith("2026-10-21")))
+        # The third time changes nothing: the cap holds across the 15-minute re-runs.
+        third = self.derive("Roundcube = roundcube webmail\nApache bRPC\nPHP\n", REPLAY_NOW)
+        self.assertEqual({i.id for i in third}, {i.id for i in again})
+
+    def test_a_shown_alert_keeps_its_day_when_earlier_evidence_arrives(self):
+        for name in ("osv_BIT-php-2026-109618.json", "osv_BIT-php-2026-109619.json"):
+            self.store.save_items(osv.COLLECTOR.parse(fixture(name), LATER_NOW))
+        first = self.derive("PHP\n", LATER_NOW, save=True)
+        self.assertEqual({i.happened_at[:10] for i in first}, {"2026-10-22"})
+        self.store.save_items(nvd.COLLECTOR.parse(gz("nvd_pub_2026-10-21.json.gz"), LATER_NOW))  # published 21 Oct
+        again = self.derive("PHP\n", LATER_NOW)
+        self.assertEqual({(i.id, i.happened_at) for i in again}, {(i.id, i.happened_at) for i in first})
+        self.assertTrue(all("nvd-cves" in i.summary for i in again))  # facts refreshed, day kept
+
+    def test_odd_advisory_fields_never_stop_the_alerts(self):
+        self.load(REPLAY_NOW)
+        odd = cisa_kev.COLLECTOR.parse(
+            b'{"vulnerabilities": [{"cveID": "CVE-2026-99999", "dateAdded": "2026-10-21", "vendorProject": ["x"],'
+            b' "product": 5}, {"cveID": "CVE-2026-99998", "dateAdded": "2026-10-21", "vendorProject": "PHP",'
+            b' "product": "PHP"}]}', REPLAY_NOW)
+        self.store.save_items(odd)
+        self.assertEqual(keys(self.derive("PHP\n", REPLAY_NOW)), PHP2SHELL | {"CVE-2026-99998"})
 
 
 class Wiring(StoreCase):
@@ -293,6 +341,30 @@ class Wiring(StoreCase):
         self.assertFalse(any("secret" in u.lower() for u in requested))
         board = panel_entries(self.store, Registry(collectors).panel("my-stack"), REPLAY_NOW)
         self.assertEqual({e["title"].split(" · ")[1].split(" — ")[0] for e in board["entries"]}, PHP2SHELL)
+
+    def test_one_bad_osv_record_is_skipped_but_a_bad_listing_fails(self):
+        from worldwatch.http import FetchError
+        from worldwatch.runner import run_source
+        listing = b"2026-10-28T11:00:00Z,BIT-gone-2026-1\n2026-10-28T10:00:00Z,BIT-php-2026-109618\n"
+
+        class Bucket:
+            def __init__(self, listing_ok=True):
+                self.listing_ok = listing_ok
+
+            def get(self, url):
+                if url == osv.LISTING:
+                    if not self.listing_ok:
+                        raise FetchError("HTTP 500")
+                    return listing
+                if "gone" in url:
+                    raise FetchError("HTTP 404 from storage.googleapis.com")
+                return fixture("osv_BIT-php-2026-109618.json")
+
+        result = run_source(self.store, osv.COLLECTOR, Bucket(), LATER_NOW)
+        self.assertTrue(result.ok)
+        self.assertEqual(result.n_items, 1)
+        self.assertFalse(run_source(self.store, osv.COLLECTOR, Bucket(listing_ok=False),
+                                    LATER_NOW + timedelta(days=1)).ok)
 
     def test_runaway_paging_stops(self):
         from worldwatch import runner

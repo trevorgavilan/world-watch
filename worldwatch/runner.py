@@ -67,8 +67,15 @@ def _fetch_all(collector: Collector, fetcher, last_ok: datetime | None, now: dat
         fetched += 1
         if fetched > MAX_URLS_PER_RUN:
             raise ParseError(f"{collector.source}: more than {MAX_URLS_PER_RUN} URLs in one run")
-        payload = fetcher.get(url)
-        by_id.update((item.id, item) for item in collector.parse(payload, now))
+        try:
+            payload = fetcher.get(url)
+            parsed = collector.parse(payload, now)
+        except (FetchError, ParseError) as err:
+            if fetched == 1 or not collector.follow_optional or isinstance(err, RateLimited):
+                raise
+            log.warning("%s: skipped %s: %s", collector.source, url, err)
+            continue
+        by_id.update((item.id, item) for item in parsed)
         if collector.follow:
             queue.extend(collector.follow(payload, url, last_ok, now))
     return list(by_id.values())
@@ -94,8 +101,8 @@ def run_source(store: Store, collector: Collector, fetcher, now: datetime) -> Ru
             log.exception("%s: unexpected error", collector.source)
         else:
             log.warning("%s: %s (failure %d in a row)", collector.source, message, fails)
-        delay = failure_delay_s(fails, rate_limited=rate_limited,
-                                retry_after_s=getattr(err, "retry_after_s", None))
+        delay = max(failure_delay_s(fails, rate_limited=rate_limited,
+                                    retry_after_s=getattr(err, "retry_after_s", None)), collector.min_retry_s)
         store.record_run(collector.source, now, datetime.now(timezone.utc), ok=False, n_items=0,
                          error=message, next_due=iso_utc(now + timedelta(seconds=delay)), fail_count=fails)
         return RunResult(collector.source, False, 0, message, rate_limited)

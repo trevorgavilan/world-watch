@@ -54,16 +54,21 @@ def page_url(start: datetime, end: datetime, index: int) -> str:
 def follow(payload: bytes, url: str, last_ok, now) -> list[str]:
     """The next page, while the API says there are more results than this page reached."""
     data = decode_json(payload, SOURCE)
+    query = parse_qs(urlsplit(url).query)
     try:
-        start, per_page, total = int(data["startIndex"]), int(data["resultsPerPage"]), int(data["totalResults"])
-    except (KeyError, TypeError, ValueError) as err:
+        start = int(query["startIndex"][0])  # where we asked to start, not what the page claims
+        per_page, total = int(data["resultsPerPage"]), int(data["totalResults"])
+    except (KeyError, IndexError, TypeError, ValueError) as err:
         raise ParseError(f"{SOURCE}: no paging fields") from err
+    if start >= total:
+        return []
+    if per_page <= 0:
+        raise ParseError(f"{SOURCE}: an empty page at {start} of {total}")
     following = start + per_page
-    if per_page <= 0 or following >= total:
+    if following >= total:
         return []
     if following // per_page >= MAX_PAGES:
         raise ParseError(f"{SOURCE}: {total} results is more than {MAX_PAGES} pages")
-    query = parse_qs(urlsplit(url).query)
     return [f"{BASE}?" + urlencode({"pubStartDate": query["pubStartDate"][0], "pubEndDate": query["pubEndDate"][0],
                                      "startIndex": following}) + "&noRejected"]
 
@@ -85,7 +90,9 @@ def products(cve: dict) -> list[list[str]]:
     for config in cve.get("configurations") or []:
         for node in (config.get("nodes") or []) if isinstance(config, dict) else []:
             for match in (node.get("cpeMatch") or []) if isinstance(node, dict) else []:
-                parts = str(match.get("criteria", "")).split(":") if isinstance(match, dict) else []
+                if not isinstance(match, dict):
+                    continue
+                parts = str(match.get("criteria", "")).split(":")
                 if match.get("vulnerable") and len(parts) > 4 and parts[3] not in ("*", "-"):
                     found.append([parts[3], parts[4]])
     unique: list[list[str]] = []
@@ -97,13 +104,17 @@ def products(cve: dict) -> list[list[str]]:
 
 def cvss(cve: dict) -> tuple[float, str] | None:
     """The newest CVSS version present: (base score, severity)."""
-    metrics = cve.get("metrics") or {}
+    metrics = cve.get("metrics") if isinstance(cve.get("metrics"), dict) else {}
     for key in ("cvssMetricV40", "cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
         for metric in metrics.get(key) or []:
-            data = metric.get("cvssData") or {}
+            data = metric.get("cvssData") if isinstance(metric, dict) else None
+            if not isinstance(data, dict):
+                continue
             score = data.get("baseScore")
             if isinstance(score, (int, float)) and not isinstance(score, bool):
                 severity = data.get("baseSeverity") or metric.get("baseSeverity") or ""
+                if not isinstance(severity, str):
+                    severity = ""
                 return float(score), str(severity).lower()
     return None
 
@@ -162,5 +173,6 @@ COLLECTOR = Collector(
     parse_records=parse_records,
     url_for=url_for,
     follow=follow,
+    min_retry_s=2 * 3600,  # a failure waits the same two hours: NIST's rule holds when NVD has trouble too
     panel=Panel(id="nvd", en="New CVEs (NVD)", es="CVE nuevas (NVD)", window=timedelta(days=2), limit=40),
 )

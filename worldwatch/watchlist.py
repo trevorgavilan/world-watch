@@ -34,12 +34,40 @@ def norm(text: str) -> str:
 
 
 @dataclass(frozen=True)
+class Name:
+    """An advisory's vendor and product, normalised once: the advisory's own words kept for display."""
+    vendor: str
+    product: str
+    label: str
+
+    @classmethod
+    def of(cls, vendor: object, product: object) -> Name | None:
+        """None for anything that is not text: advisories are untrusted."""
+        if not isinstance(product, str) or not isinstance(vendor, (str, type(None))):
+            return None
+        product_n = norm(product)
+        if not product_n:
+            return None
+        label = " ".join(p for p in (vendor, product) if p and p.lower() != "n/a")
+        return cls(norm(vendor or ""), product_n, label)
+
+
+@dataclass(frozen=True)
 class Term:
     words: str
     prefix: bool  # ended in '*': also matches longer names starting with these words
 
-    def hits(self, candidate: str) -> bool:
-        return candidate == self.words or (self.prefix and candidate.startswith(self.words + " "))
+    def hits(self, name: Name) -> bool:
+        both = f"{name.vendor} {name.product}".strip()
+        if self.words == name.product or self.words == both:
+            return True
+        if not self.prefix:
+            return False
+        if name.product.startswith(self.words + " "):
+            return True
+        # "vendor product…" only when the term names the vendor and more: "python*" is not every
+        # product of a vendor called Python, "microsoft windows 11*" is Windows 11 in any edition.
+        return bool(name.vendor) and self.words.startswith(name.vendor + " ") and both.startswith(self.words + " ")
 
 
 @dataclass(frozen=True)
@@ -47,16 +75,13 @@ class Entry:
     name: str
     terms: tuple[Term, ...]
 
-    def matches(self, vendor: str, product: str) -> str | None:
+    def hit(self, name: Name) -> bool:
+        return any(term.hits(name) for term in self.terms)
+
+    def matches(self, vendor: object, product: object) -> str | None:
         """The advisory's own words that matched ('PHP Group PHP'), or None."""
-        product_n = norm(product or "")
-        if not product_n:
-            return None
-        both = norm(f"{vendor or ''} {product}")
-        for term in self.terms:
-            if term.hits(product_n) or term.hits(both):
-                return " ".join(p for p in (vendor, product) if p and p.lower() != "n/a")
-        return None
+        name = Name.of(vendor, product)
+        return name.label if name and self.hit(name) else None
 
 
 def _term(raw: str) -> Term | None:

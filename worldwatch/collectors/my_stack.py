@@ -4,22 +4,22 @@ in the local watchlist (worldwatch/watchlist.py), with EPSS when FIRST has score
 Nothing is fetched: this collector works from the store (`derive`), so it runs after the others.
 An alert is one (vulnerability, stage): "new" when NVD or OSV publishes it, "exploited" when CISA
 lists it — the second is news even when the first was already shown. At most CAP_PER_DAY alerts per
-day — Trevor's day in CDMX, or KEV's own date for KEV, which gives a date, not a moment; once shown
-an alert stays, and the rest of that day fold into one "+N more" line. Every alert is basis "inferred": the match is ours, the facts are the sources'.
+day — the evidence's own UTC date, which is also the date the Board and Recon show (KEV gives only
+a date). Once shown an alert stays, on the day it was shown under, and the rest of a day fold into
+one "+N more" line. Every alert is basis "inferred": the match is ours, the facts are the sources'.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from functools import partial
 from pathlib import Path
 
 from .. import watchlist
 from ..item import Item, item_id, iso_utc, make_item, parse_iso_utc
-from ..recon import local
 from ..views import Panel
 from . import Collector, cisa_kev, epss, nvd, osv
 
@@ -52,12 +52,22 @@ def _raw(row) -> dict:
 
 
 def _match(entries, pairs) -> tuple[str, str] | None:
+    """The first (watchlist entry, advisory's words) that match. Each name is normalised once."""
+    names = []
+    for pair in pairs if isinstance(pairs, list) else []:
+        if isinstance(pair, (list, tuple)) and len(pair) == 2:
+            name = watchlist.Name.of(*pair)
+            if name is not None:
+                names.append(name)
     for entry in entries:
-        for vendor, product in pairs:
-            hit = entry.matches(vendor, product)
-            if hit:
-                return entry.name, hit
+        for name in names:
+            if entry.hit(name):
+                return entry.name, name.label
     return None
+
+
+def _text(value: object) -> str:
+    return value if isinstance(value, str) else ""
 
 
 def _rows(store, source: str, now: datetime):
@@ -74,18 +84,22 @@ def gather(store, entries, now: datetime) -> dict[str, Evidence]:
             ev.entry, ev.matched = hit
 
     for row in _rows(store, nvd.SOURCE, now):
-        hit = _match(entries, _raw(row).get("products") or [])
+        data = _raw(row)
+        hit = _match(entries, data.get("products"))
         if hit:
-            note(_raw(row).get("id") or row["id"], row, hit)
+            note(_text(data.get("id")) or row["id"], row, hit)
     for row in _rows(store, osv.SOURCE, now):
         data = _raw(row)
-        hit = _match(entries, [(eco, name) for eco, name in data.get("packages") or []])
+        hit = _match(entries, data.get("packages"))
         if hit:
-            note((data.get("cves") or [data.get("id") or row["id"]])[0], row, hit)
-    kev_rows = {(_raw(r).get("cveID")): r for r in _rows(store, cisa_kev.SOURCE, now)}
-    for cve, row in kev_rows.items():
+            cves = [c for c in data.get("cves") or [] if _text(c)]
+            note(cves[0] if cves else _text(data.get("id")) or row["id"], row, hit)
+    for row in _rows(store, cisa_kev.SOURCE, now):
         data = _raw(row)
-        hit = _match(entries, [(data.get("vendorProject") or "", data.get("product") or "")])
+        cve = _text(data.get("cveID"))
+        if not cve:
+            continue
+        hit = _match(entries, [[data.get("vendorProject") or "", data.get("product")]])
         if hit:
             ev = found.setdefault(cve, Evidence(cve))
             ev.exploited = row
@@ -103,10 +117,8 @@ class Alert:
     rank: tuple
 
 
-def _day(happened_at: str, stage: str) -> str:
-    if stage == EXPLOITED:
-        return happened_at[:10]
-    return local(parse_iso_utc(happened_at)).strftime("%Y-%m-%d")
+def _day(happened_at: str) -> str:
+    return happened_at[:10]  # UTC: the date the Board and Recon show for this date-only panel
 
 
 def _epss(store, cve: str, now: datetime) -> dict | None:
@@ -117,7 +129,11 @@ def _epss(store, cve: str, now: datetime) -> dict | None:
 
 
 def _best_cvss(rows) -> tuple[float, str] | None:
-    scores = [tuple(_raw(r)["cvss"]) for r in rows if r["source"] == nvd.SOURCE and _raw(r).get("cvss")]
+    scores = []
+    for row in rows:
+        score = _raw(row).get("cvss") if row["source"] == nvd.SOURCE else None
+        if isinstance(score, list) and len(score) == 2 and isinstance(score[0], (int, float)):
+            scores.append((float(score[0]), str(score[1])))
     return max(scores) if scores else None
 
 
@@ -155,7 +171,7 @@ def _alerts(store, ev: Evidence, now: datetime) -> list[Alert]:
             severity="exploited" if stage == EXPLOITED else (facts[0] if facts else None),
             licence=LICENCE, raw=raw, basis="inferred", lang="en",
         )
-        out.append(Alert(item, _day(row["happened_at"], stage), (stage == EXPLOITED, *base_rank)))
+        out.append(Alert(item, _day(item.happened_at), (stage == EXPLOITED, *base_rank)))
     return out
 
 
@@ -176,24 +192,26 @@ def derive(store, now: datetime, path: Path) -> list[Item]:
         log.debug("%s: no watchlist entries in %s; no alerts", SOURCE, path)
         return []
     alerts = [a for ev in gather(store, entries, now).values() for a in _alerts(store, ev, now)]
-    shown_ids, shown_per_day = set(), {}
-    for row in _rows(store, SOURCE, now):
-        data = _raw(row)
-        if data.get("kind") == "alert" and row["id"] not in shown_ids:
-            shown_ids.add(row["id"])
-            day = _day(row["happened_at"], data.get("stage", NEW))
-            shown_per_day[day] = shown_per_day.get(day, 0) + 1
+    shown: dict[str, str] = {}  # alert id -> the time it was shown under (its day never moves)
+    shown_per_day: dict[str, int] = {}
+    for row in store.items_between(SOURCE, iso_utc(now - LOOKBACK - timedelta(days=1)),  # frozen times run early
+                                   iso_utc(now + FUTURE_SLACK), limit=SCAN_LIMIT):
+        if _raw(row).get("kind") == "alert":
+            shown[row["id"]] = row["happened_at"]
+            shown_per_day[_day(row["happened_at"])] = shown_per_day.get(_day(row["happened_at"]), 0) + 1
     items: list[Item] = []
     by_day: dict[str, list[Alert]] = {}
     for alert in alerts:
-        by_day.setdefault(alert.day, []).append(alert)
+        if alert.item.id in shown:
+            # Once shown it stays, on its day; its facts are refreshed (an earlier source can't move it).
+            items.append(replace(alert.item, happened_at=shown[alert.item.id]))
+        else:
+            by_day.setdefault(alert.day, []).append(alert)
     for day, group in sorted(by_day.items()):
         room = CAP_PER_DAY - shown_per_day.get(day, 0)
         hidden = []
         for alert in sorted(group, key=lambda a: (a.rank, a.item.id), reverse=True):
-            if alert.item.id in shown_ids:
-                items.append(alert.item)  # once shown it stays; its facts are refreshed
-            elif room > 0:
+            if room > 0:
                 items.append(alert.item)
                 room -= 1
             else:

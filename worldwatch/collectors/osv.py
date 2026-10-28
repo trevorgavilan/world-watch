@@ -154,6 +154,7 @@ COLLECTOR = Collector(
     licence=LICENCE,
     parse_records=parse_records,
     follow=follow,
+    follow_optional=True,  # a record gone from the bucket (or odd) is skipped; the listing itself must answer
     decode=decode,
     panel=Panel(id="osv", en="Server software advisories (OSV · Bitnami)",
                 es="Avisos de software de servidor (OSV · Bitnami)", window=timedelta(days=7), limit=30),
