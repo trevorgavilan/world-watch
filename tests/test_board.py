@@ -270,6 +270,8 @@ class TextNotHtml(unittest.TestCase):
         self.assertEqual(resp.getheader("Content-Type"), "application/json; charset=utf-8")
         self.assertEqual(resp.getheader("X-Content-Type-Options"), "nosniff")
         self.assertNotIn(b"<script>", data)  # escaped inside the JSON string as <
+        for raw in (b"<", b">", b"&"):  # none of them, anywhere in the response
+            self.assertNotIn(raw, data)
         titles = [e["title"] for e in json.loads(data)["entries"]]
         self.assertIn(HOSTILE, titles)
 
