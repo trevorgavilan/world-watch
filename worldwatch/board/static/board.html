@@ -13,13 +13,18 @@
 <header class="bar">
   <h1>World Watch</h1>
   <ul id="fresh" class="fresh" aria-label="Sources and when each was last fetched"></ul>
+  <p id="fresh-sum" class="fresh-sum"></p>
   <a class="recon" href="/recon">Morning Recon</a>
 </header>
-<main class="board">
+<p id="fresh-detail" class="fresh-detail" role="status" hidden></p>
+<main id="board" class="board">
   <section id="globe" class="globe" aria-label="Globe"></section>
-  <aside class="side">
-    <section class="box">
-      <h2>Layers · Capas</h2>
+  <div id="divider" class="divider" role="separator" tabindex="0" aria-orientation="vertical"
+       aria-controls="side" aria-label="Resize the lists"
+       title="Drag, or use the arrow keys (Home, End), to share the space; double-click for the default"></div>
+  <aside id="side" class="side">
+    <section id="layers-box" class="box">
+      <h2><button class="fold" type="button" aria-expanded="true">Layers · Capas</button></h2>
       <ul id="layers" class="layers"></ul>
     </section>
     <section id="picked" class="box picked" hidden>

@@ -1,19 +1,28 @@
 /* World Watch Board. Everything comes from this server's read-only /api/ routes.
    Source text is data: it is only ever set with textContent, and a link is used only after
-   safe() re-checks it as http(s) (D-17). globe.gl renders point labels as HTML, so they stay off. */
+   safe() re-checks it as http(s) (D-17). globe.gl renders point labels as HTML, so they stay off.
+   The layout (the globe / list split, folded lists) is remembered in this browser's localStorage. */
 "use strict";
 
 (() => {
   const TZ = "America/Mexico_City";
   const REFRESH_MS = 60 * 1000;
   const $ = (id) => document.getElementById(id);
+  const SIDE_KEY = "ww.board.side";      // the list column's width, in px
+  const FOLD_KEY = "ww.board.folded";    // the ids of the folded lists
+  const SIDE_MIN = 260;
+  const GLOBE_MIN = 300;
+  const KEY_STEP = 20;
 
   const moment = new Intl.DateTimeFormat("en-GB", {
     timeZone: TZ, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
   });
   const day = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "2-digit", month: "short", year: "numeric" });
 
-  const state = { globe: null, layers: [], shown: {}, points: {}, now: null };
+  const state = {
+    globe: null, layers: [], shown: {}, points: {}, now: null,
+    side: null, folded: new Set(), sources: [], detail: null,
+  };
 
   function el(tag, text, cls) {
     const node = document.createElement(tag);
@@ -70,6 +79,114 @@
     return response.json();
   }
 
+  /* Storage may be refused, or hold anything a user, an old version or an extension left there:
+     every read is checked, and a refusal only means the layout isn't kept. */
+  function remember(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch (_) { /* not kept */ }
+  }
+
+  function recall(key) {
+    try {
+      return localStorage.getItem(key);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function storedSide() {
+    const raw = recall(SIDE_KEY);
+    return raw !== null && /^\d{1,5}$/.test(raw) ? Number(raw) : null;
+  }
+
+  function storedFolds() {
+    try {
+      const ids = JSON.parse(recall(FOLD_KEY));
+      return new Set(Array.isArray(ids) ? ids.filter((id) => typeof id === "string") : []);
+    } catch (_) {
+      return new Set();
+    }
+  }
+
+  /* null means "the default split": 28% of the room, never under 380 px. */
+  function clampSide(px) {
+    const room = $("board").clientWidth - $("divider").offsetWidth;
+    const wanted = px === null ? Math.max(380, room * 0.28) : px;
+    return Math.round(Math.max(SIDE_MIN, Math.min(wanted, room - GLOBE_MIN)));
+  }
+
+  function applySide() {
+    const px = clampSide(state.side);
+    $("board").style.setProperty("--side", px + "px");
+    const divider = $("divider");
+    divider.setAttribute("aria-valuenow", String(px));
+    divider.setAttribute("aria-valuemin", String(SIDE_MIN));
+    divider.setAttribute("aria-valuemax", String(clampSide(Infinity)));
+    divider.setAttribute("aria-valuetext", "lists " + px + " pixels wide");
+  }
+
+  function setSide(px, keep) {
+    state.side = clampSide(px);
+    applySide();
+    if (keep) remember(SIDE_KEY, String(state.side));
+  }
+
+  function makeDivider() {
+    const divider = $("divider");
+    let drag = null;
+    divider.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      drag = { x: e.clientX, side: clampSide(state.side) };
+      divider.setPointerCapture(e.pointerId);
+      divider.classList.add("dragging");
+      e.preventDefault();
+    });
+    divider.addEventListener("pointermove", (e) => {
+      if (drag) setSide(drag.side + drag.x - e.clientX, false);
+    });
+    const end = () => {
+      if (!drag) return;
+      drag = null;
+      divider.classList.remove("dragging");
+      if (state.side !== null) remember(SIDE_KEY, String(state.side));  // a click without a move keeps the default
+    };
+    divider.addEventListener("pointerup", end);
+    divider.addEventListener("pointercancel", end);
+    divider.addEventListener("lostpointercapture", end);
+    divider.addEventListener("keydown", (e) => {
+      const step = { ArrowLeft: KEY_STEP, ArrowRight: -KEY_STEP, Home: Infinity, End: -Infinity }[e.key];
+      if (!step) return;
+      e.preventDefault();
+      setSide(clampSide(state.side) + step, true);  // Home: widest lists, End: narrowest
+    });
+    divider.addEventListener("dblclick", () => {  // back to the default split
+      state.side = null;
+      applySide();
+      remember(SIDE_KEY, "");
+    });
+    window.addEventListener("resize", applySide);
+    state.side = storedSide();
+    applySide();
+  }
+
+  function foldable(box, list, id) {
+    const button = box.querySelector(".fold");
+    button.dataset.key = "fold:" + id;
+    const show = (open) => {
+      list.hidden = !open;
+      button.setAttribute("aria-expanded", String(open));
+    };
+    show(!state.folded.has(id));
+    button.addEventListener("click", () => {
+      const open = list.hidden;
+      if (open) state.folded.delete(id);
+      else state.folded.add(id);
+      show(open);
+      remember(FOLD_KEY, JSON.stringify([...state.folded]));
+    });
+  }
+
   function color(weight) {
     const w = Math.min(Math.max(Number(weight) || 0, 0), 1);
     return "hsl(" + Math.round(55 - 55 * w) + ", 95%, " + Math.round(62 - 12 * w) + "%)";
@@ -93,7 +210,7 @@
       .pointsMerge(false)
       .onPointClick(pick);
     const fit = () => globe.width(box.clientWidth).height(box.clientHeight);
-    window.addEventListener("resize", fit);
+    new ResizeObserver(fit).observe(box);  // the window, or the divider
     fit();
     globe.pointOfView({ lat: 19.4, lng: -99.1, altitude: 2.4 });  // start over Mexico
     return globe;
@@ -139,6 +256,7 @@
     for (const layer of state.layers) {
       const box = el("input");
       box.type = "checkbox";
+      box.dataset.key = "layer:" + layer.id;
       box.checked = state.shown[layer.id] !== false;
       box.addEventListener("change", () => {
         state.shown[layer.id] = box.checked;
@@ -154,17 +272,49 @@
     if (!state.layers.length) list.append(el("li", "No layers yet.", "empty"));
   }
 
+  function sourceLine(s) {
+    if (!s.last_ok_at) return s.source + " · never fetched";
+    return s.source + " · fetched " + ago(s.last_ok_at) + (s.stale ? " · stale" : "");
+  }
+
+  function sourceDetail(s) {
+    return (s.last_ok_at ? "last good fetch " + when(s.last_ok_at, false) : "no good fetch yet") +
+      (s.last_error ? " · last error: " + s.last_error : "");
+  }
+
+  function drawDetail() {
+    const box = $("fresh-detail");
+    const s = state.sources.find((x) => x.source === state.detail);
+    if (!s) state.detail = null;
+    box.textContent = s ? sourceLine(s) + " · " + sourceDetail(s) : "";
+    box.hidden = !s;
+    for (const dot of $("fresh").querySelectorAll(".dot")) {
+      dot.setAttribute("aria-pressed", String(dot.dataset.source === state.detail));
+    }
+  }
+
+  /* One dot per source, on one row: its name and times are in the tooltip, and in a line below on click. */
   function drawFreshness(sources) {
     const list = $("fresh");
     const credits = $("credits");
     list.replaceChildren();
     credits.replaceChildren();
+    const counts = { ok: 0, stale: 0, never: 0 };
     for (const s of sources) {
-      const item = el("li", null, s.last_ok_at ? (s.stale ? "stale" : "ok") : "never");
-      const text = s.last_ok_at ? "fetched " + ago(s.last_ok_at) : "never fetched";
-      item.append(el("b", s.source), document.createTextNode(" " + text + (s.stale && s.last_ok_at ? " · stale" : "")));
-      item.title = (s.last_ok_at ? "Last good fetch " + when(s.last_ok_at, false) : "No good fetch yet") +
-        (s.last_error ? " · last error: " + s.last_error : "");
+      const kind = s.last_ok_at ? (s.stale ? "stale" : "ok") : "never";
+      counts[kind] += 1;
+      const dot = el("button", null, "dot " + kind);
+      dot.type = "button";
+      dot.dataset.source = s.source;
+      dot.dataset.key = "dot:" + s.source;
+      dot.setAttribute("aria-label", sourceLine(s));
+      dot.title = sourceLine(s) + "\n" + sourceDetail(s);
+      dot.addEventListener("click", () => {
+        state.detail = state.detail === s.source ? null : s.source;
+        drawDetail();
+      });
+      const item = el("li");
+      item.append(dot);
       list.append(item);
       if (s.credit) {
         const credit = el("li");
@@ -172,11 +322,18 @@
         credits.append(credit);
       }
     }
+    $("fresh-sum").textContent = counts.ok + " fresh · " + counts.stale + " stale · " + counts.never + " never fetched";
+    state.sources = sources;
+    drawDetail();
   }
 
   function drawPanel(spec, body) {
     const box = el("section", null, "box");
-    box.append(el("h2", spec.en + " · " + spec.es));
+    const head = el("h2");
+    const fold = el("button", spec.en + " · " + spec.es, "fold");
+    fold.type = "button";
+    head.append(fold);
+    box.append(head);
     const list = el("ol", null, "entries");
     for (const e of body.entries) {
       const item = el("li");
@@ -192,6 +349,7 @@
     }
     if (!body.entries.length) list.append(el("li", "Nothing in this window.", "empty"));
     box.append(list);
+    foldable(box, list, "panel:" + spec.id);
     return box;
   }
 
@@ -203,16 +361,31 @@
       const layerBodies = await Promise.all(board.layers.map((l) => getJson("/api/layers/" + encodeURIComponent(l.id))));
       board.layers.forEach((l, i) => { state.points[l.id] = layerBodies[i].points; });
       const panelBodies = await Promise.all(board.panels.map((p) => getJson("/api/panels/" + encodeURIComponent(p.id))));
+      const focused = document.activeElement && document.activeElement.dataset
+        ? document.activeElement.dataset.key : undefined;
       $("panels").replaceChildren(...board.panels.map((p, i) => drawPanel(p, panelBodies[i])));
       drawFreshness(board.sources);
       drawLayers();
       drawPoints();
+      if (focused) {  // the refresh rebuilt the dot, fold or box the keyboard was on: stay on it
+        const again = [...document.querySelectorAll("[data-key]")].find((n) => n.dataset.key === focused);
+        if (again) again.focus();
+      }
       status("Updated " + when(board.now, false) + " · from the local store only", false);
     } catch (err) {
       status("Could not read the store: " + err.message + " (showing what was last loaded)", true);
     }
   }
 
+  state.folded = storedFolds();
+  makeDivider();
+  foldable($("layers-box"), $("layers"), "layers");
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && state.detail) {
+      state.detail = null;
+      drawDetail();
+    }
+  });
   state.globe = makeGlobe();
   load();
   setInterval(load, REFRESH_MS);

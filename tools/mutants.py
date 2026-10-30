@@ -1,6 +1,7 @@
 """Planted bugs: each mutant breaks one rule that matters; the suite must catch every one.
 
-    python tools/mutants.py
+    python tools/mutants.py           every planted bug (~15 min)
+    python tools/mutants.py layout strip    only those whose name has one of the words (while working)
 
 Copies the code to a temp folder per mutant, applies one edit, runs the tests,
 and expects them to fail. Exit 0 only when every mutant is caught.
@@ -156,6 +157,40 @@ MUTANTS = [
      'tier = 2 if impact in ("major", "critical") else 0', "tier = 0"),
     ("wiring: the status pages are not in the run", "worldwatch/collectors/__init__.py",
      "epss.COLLECTOR, *status_pages.COLLECTORS]", "epss.COLLECTOR]"),
+    # Board layout: a split kept per browser and always sane, lists that fold, a one-row strip, D-17 intact.
+    ("layout: the dragged split is not remembered", "worldwatch/board/static/board.js",
+     "if (state.side !== null) remember(SIDE_KEY, String(state.side));", ""),
+    ("layout: a stored split is used unchecked", "worldwatch/board/static/board.js",
+     "return raw !== null && /^\\d{1,5}$/.test(raw) ? Number(raw) : null;",
+     "return raw === null ? null : Number(raw);"),
+    ("layout: the split is not clamped (the globe or the lists vanish)", "worldwatch/board/static/board.js",
+     "return Math.round(Math.max(SIDE_MIN, Math.min(wanted, room - GLOBE_MIN)));", "return Math.round(wanted);"),
+    ("layout: a smaller window keeps a split that no longer fits", "worldwatch/board/static/board.js",
+     'window.addEventListener("resize", applySide);', ""),
+    ("layout: the globe is not redrawn when the divider moves", "worldwatch/board/static/board.js",
+     "new ResizeObserver(fit).observe(box);", 'window.addEventListener("resize", fit);'),
+    ("layout: the divider ignores the keyboard", "worldwatch/board/static/board.js",
+     "const step = { ArrowLeft: KEY_STEP, ArrowRight: -KEY_STEP, Home: Infinity, End: -Infinity }[e.key];",
+     "const step = 0;"),
+    ("layout: folds are not remembered", "worldwatch/board/static/board.js",
+     "remember(FOLD_KEY, JSON.stringify([...state.folded]));", ""),
+    ("layout: junk in the stored folds stops the page", "worldwatch/board/static/board.js",
+     "    try {\n      const ids = JSON.parse(recall(FOLD_KEY));\n"
+     "      return new Set(Array.isArray(ids) ? ids.filter((id) => typeof id === \"string\") : []);\n"
+     "    } catch (_) {\n      return new Set();\n    }\n",
+     "    return new Set(JSON.parse(recall(FOLD_KEY)) || []);\n"),
+    ("layout: a browser that refuses storage gets no Board", "worldwatch/board/static/board.js",
+     "    try {\n      return localStorage.getItem(key);\n    } catch (_) {\n      return null;\n    }\n",
+     "    return localStorage.getItem(key);\n"),
+    ("strip: the sources are names again, spilling over the bar", "worldwatch/board/static/board.js",
+     'const dot = el("button", null, "dot " + kind);',
+     'const dot = el("button", sourceLine(s), "dot " + kind);\n'
+     '      dot.style.width = dot.style.height = "auto";\n      dot.style.whiteSpace = "nowrap";'),
+    ("strip: a source's error written as HTML", "worldwatch/board/static/board.js",
+     'box.textContent = s ? sourceLine(s) + " · " + sourceDetail(s) : "";',
+     'box.innerHTML = s ? sourceLine(s) + " · " + sourceDetail(s) : "";'),
+    ("board: the CSP lets inline styles in", "worldwatch/board/server.py",
+     "style-src 'self'; img-src", "style-src 'self' 'unsafe-inline'; img-src"),
 ]
 
 
@@ -179,8 +214,11 @@ def run_one(name: str, rel: str, old: str, new: str) -> bool:
 
 
 def _suite_fails(work: Path) -> bool:
-    result = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
-                            cwd=work, capture_output=True, text=True, timeout=300)
+    try:
+        result = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
+                                cwd=work, capture_output=True, text=True, timeout=600)
+    except subprocess.TimeoutExpired:
+        return True  # a hung suite is a failing one
     return result.returncode != 0
 
 
@@ -188,7 +226,8 @@ def main() -> int:
     if run_one("baseline", "", "", ""):
         print("  the untouched copy fails its own tests: fix that before trusting any mutant")
         return 1
-    results = [run_one(*m) for m in MUTANTS]
+    only = sys.argv[1:]
+    results = [run_one(*m) for m in MUTANTS if not only or any(word in m[0] for word in only)]
     print(f"{sum(results)}/{len(results)} mutants caught")
     return 0 if all(results) else 1
 
