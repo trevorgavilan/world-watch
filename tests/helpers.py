@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import atexit
 import os
+import shutil
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,7 +20,9 @@ def fixture(name: str) -> bytes:
 
 
 def temp_dir() -> Path:
-    return Path(tempfile.mkdtemp(prefix="ww-test-"))
+    path = Path(tempfile.mkdtemp(prefix="ww-test-"))
+    atexit.register(shutil.rmtree, path, ignore_errors=True)  # else every run leaks into %TEMP%
+    return path
 
 
 def sample_item(n: int = 1, *, source: str = "test-src", channel: str = "news", **over):
