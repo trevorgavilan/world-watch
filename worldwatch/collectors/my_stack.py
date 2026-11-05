@@ -16,7 +16,7 @@ and takes none of the 5: Trevor can be away for days, and it must not hide in "+
 names no part reaches a list that watches any part of that service (D-21).
 
 Taking a name off the watchlist takes its alerts and the "+N more" lines off the Board and frees
-their day; an empty or unreadable list changes nothing.
+their day; an empty or unreadable list, or one with a line it can't use, removes nothing.
 """
 
 from __future__ import annotations
@@ -252,7 +252,8 @@ def _overflow(day: str, hidden: list[Alert], now: datetime) -> Item:
 
 
 def derive(store, now: datetime, path: Path) -> list[Item]:
-    entries = watchlist.load(path)
+    problems: list[str] = []
+    entries = watchlist.load(path, problems)
     if not entries:
         log.debug("%s: no watchlist entries in %s; no alerts", SOURCE, path)
         return []
@@ -270,7 +271,7 @@ def derive(store, now: datetime, path: Path) -> list[Item]:
         if data.get("kind") == "overflow":
             old_lines.append(row["id"])
         elif data.get("kind") == "alert":
-            if row["id"] not in derived and data.get("entry") not in listed:
+            if not problems and row["id"] not in derived and data.get("entry") not in listed:
                 gone.append(row["id"])
                 continue
             shown[row["id"]] = row["happened_at"]
@@ -298,7 +299,7 @@ def derive(store, now: datetime, path: Path) -> list[Item]:
         if hidden:
             items.append(_overflow(day, hidden, now))
     kept = {i.id for i in items}
-    store.forget_items(gone + [line for line in old_lines if line not in kept])
+    store.forget_items(SOURCE, gone + [line for line in old_lines if line not in kept])
     return items
 
 

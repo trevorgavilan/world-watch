@@ -97,8 +97,15 @@ def _term(raw: str) -> Term | None:
     return Term(words, prefix)
 
 
-def parse(text: str) -> list[Entry]:
+def parse(text: str, problems: list[str] | None = None) -> list[Entry]:
+    """The entries. A line it could not use is logged and, when given, added to `problems`."""
     entries: list[Entry] = []
+    problems = [] if problems is None else problems
+
+    def skip(message: str, *args: object) -> None:
+        log.warning(message, *args)
+        problems.append(message % args)
+
     for number, line in enumerate(text.splitlines(), 1):
         line = line.strip()
         if not line or line.startswith("#"):
@@ -106,32 +113,32 @@ def parse(text: str) -> list[Entry]:
         name, _, aliases = line.partition("=")
         name = name.strip()
         if not name or len(name) > MAX_NAME:
-            log.warning("watchlist line %d skipped: a name of 1-%d characters is needed", number, MAX_NAME)
+            skip("watchlist line %d skipped: a name of 1-%d characters is needed", number, MAX_NAME)
             continue
         terms = []
         for raw in [name, *aliases.split(",")] if aliases.strip() else [name]:
             term = _term(raw)
             if term is None:
                 if raw.strip():
-                    log.warning("watchlist line %d: %r is not a name it can match; skipped", number, raw.strip())
+                    skip("watchlist line %d: %r is not a name it can match; skipped", number, raw.strip())
                 continue
             if term not in terms:
                 terms.append(term)
         if terms:
             entries.append(Entry(name, tuple(terms)))
         if len(entries) >= MAX_ENTRIES:
-            log.warning("watchlist: only the first %d entries are used", MAX_ENTRIES)
+            skip("watchlist: only the first %d entries are used", MAX_ENTRIES)
             break
     return entries
 
 
-def load(path: Path) -> list[Entry]:
+def load(path: Path, problems: list[str] | None = None) -> list[Entry]:
     """The entries, or [] when there is no watchlist yet (then no alert can fire)."""
     try:
         if path.stat().st_size > MAX_FILE_BYTES:
             log.warning("watchlist %s is over %d bytes; not read", path, MAX_FILE_BYTES)
             return []
-        return parse(path.read_text(encoding="utf-8-sig"))
+        return parse(path.read_text(encoding="utf-8-sig"), problems)
     except FileNotFoundError:
         return []
     except (OSError, UnicodeDecodeError) as err:

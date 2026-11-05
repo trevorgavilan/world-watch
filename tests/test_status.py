@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 from tests.helpers import LIVE, fixture
 from tests.test_security import NO_PHP, REPLAY_NOW, StoreCase, gz
+from worldwatch import recon
 from worldwatch.board.data import Registry, panel_entries
 from worldwatch.collectors import ParseError, all_collectors, my_stack, nvd, status_pages
 from worldwatch.http import Fetcher
@@ -281,6 +282,33 @@ class OutageAlerts(StoreCase):
         again = self.derive("Mail = roundcube webmail\n", CLOUDFLARE_DAY, save=True)
         self.assertEqual({(i.id, i.happened_at) for i in again}, {(i.id, i.happened_at) for i in first})
         self.assertTrue(all(i.title.startswith(("Mail · ", "+")) for i in again))
+
+    def test_a_line_it_cannot_use_removes_nothing(self):
+        self.load(CLOUDFLARE_DAY)
+        text = "Roundcube = roundcube webmail@PHP@".replace("@", "\n")
+        first = self.derive(text, CLOUDFLARE_DAY, save=True)
+        with self.assertLogs("worldwatch.watchlist", level="WARNING"):
+            self.derive("Round*cube@PHP@".replace("@", "\n"), CLOUDFLARE_DAY, save=True)
+        again = self.derive(text, CLOUDFLARE_DAY)
+        self.assertEqual({i.id for i in again}, {i.id for i in first})
+
+    def test_forgetting_touches_only_the_named_source(self):
+        self.pages(status_pages.GITHUB, PAGES_DAY)
+        row = self.store.items_between("github-status", "2026-01-01", "2027-01-01", limit=1)[0]
+        self.store.forget_items(my_stack.SOURCE, [row["id"]])
+        self.assertEqual(self.store.count_items("github-status"), 50)
+
+    def test_recon_keeps_every_big_outage_of_the_week(self):
+        back = datetime(2026, 10, 28, 23, 0, tzinfo=timezone.utc)
+        for collector in (status_pages.GITHUB, status_pages.CLOUDFLARE, status_pages.CLAUDE):
+            self.pages(collector, back)
+        collector = my_stack.collector(self.watch("GitHub@Cloudflare@Claude@".replace("@", "\n")))
+        items = collector.derive(self.store, back)
+        self.store.save_items(items)
+        week = {i.id for i in items if i.happened_at >= "2026-10-22" and (i.severity or "-").split()[0] in ("major", "critical")}
+        self.assertGreater(len(week), 5)
+        section = next(s for s in recon.gather(self.store, [collector], back).sections if s.key == "my-stack")
+        self.assertLessEqual(week, {row["id"] for group in section.groups for row in group.rows})
 
     def test_a_watchlist_that_cannot_be_read_wipes_nothing(self):
         self.load(CLOUDFLARE_DAY)

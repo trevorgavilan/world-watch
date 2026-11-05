@@ -28,7 +28,7 @@ QUAKE_LIMIT = 12
 KEV_LIMIT = 15
 NEWS_LIMIT = 10
 ALERT_WINDOW = timedelta(days=7)
-ALERT_LIMIT = 15
+ALERT_LIMIT = 100  # a week of 5 a day, "+N more" lines and every big outage: nothing cut after days away
 
 CREDITS = [
     ("usgs-quakes", "Credit: U.S. Geological Survey (public domain)", "https://earthquake.usgs.gov/"),
