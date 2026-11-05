@@ -43,6 +43,10 @@ def incident(**over) -> dict:
     return {**base, **over}
 
 
+def on_day(items, day: str) -> list:
+    return [i for i in items if " · " in i.title and i.happened_at.startswith(day)]
+
+
 def alert_keys(items) -> set:
     return {json.loads(i.raw)["key"].split("/")[1] for i in items if json.loads(i.raw).get("stage") == "outage"}
 
@@ -289,8 +293,26 @@ class OutageAlerts(StoreCase):
         first = self.derive(text, CLOUDFLARE_DAY, save=True)
         with self.assertLogs("worldwatch.watchlist", level="WARNING"):
             self.derive("Round*cube@PHP@".replace("@", "\n"), CLOUDFLARE_DAY, save=True)
+        stored = {r["id"] for r in self.store.items_between(my_stack.SOURCE, "2026-10-01", "2026-10-29", limit=1000)}
+        self.assertLessEqual({i.id for i in first if " · " in i.title}, stored)  # the typo took nothing away
         again = self.derive(text, CLOUDFLARE_DAY)
         self.assertEqual({i.id for i in again}, {i.id for i in first})
+
+    def test_a_big_outage_leaves_the_5_free(self):
+        self.load(CLOUDFLARE_DAY)
+        self.pages(status_pages.CLOUDFLARE, CLOUDFLARE_DAY)
+        first = self.derive("Cloudflare\n", CLOUDFLARE_DAY, save=True)  # 22 Oct: 2 major, 4 minor: one of the 5 left
+        self.assertEqual(len(on_day(first, "2026-10-22")), 6)
+        again = self.derive("Cloudflare\nRoundcube = roundcube webmail\n", CLOUDFLARE_DAY)
+        self.assertEqual(len(on_day(again, "2026-10-22")), 7)
+
+    def test_a_renamed_entry_keeps_its_place_on_a_crowded_day(self):
+        self.load(CLOUDFLARE_DAY)
+        self.pages(status_pages.CLOUDFLARE, CLOUDFLARE_DAY)
+        first = self.derive("Cloudflare\n", CLOUDFLARE_DAY, save=True)
+        # Roundcube's CVEs outrank minor outages, but those were shown first and a new name changes nothing.
+        again = self.derive("Edge = cloudflare\nRoundcube = roundcube webmail\n", CLOUDFLARE_DAY)
+        self.assertLessEqual({i.id for i in on_day(first, "2026-10-22")}, {i.id for i in on_day(again, "2026-10-22")})
 
     def test_forgetting_touches_only_the_named_source(self):
         self.pages(status_pages.GITHUB, PAGES_DAY)
