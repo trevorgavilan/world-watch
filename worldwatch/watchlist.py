@@ -78,6 +78,10 @@ class Entry:
     def hit(self, name: Name) -> bool:
         return any(term.hits(name) for term in self.terms)
 
+    def watches_part_of(self, service: Name) -> bool:
+        """A term naming a part of this service: "cloudflare workers" of Cloudflare."""
+        return any(term.words.startswith(service.product + " ") for term in self.terms)
+
     def matches(self, vendor: object, product: object) -> str | None:
         """The advisory's own words that matched ('PHP Group PHP'), or None."""
         name = Name.of(vendor, product)

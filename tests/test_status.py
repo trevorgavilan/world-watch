@@ -152,8 +152,8 @@ class OutageAlerts(StoreCase):
         pages_only = self.derive("GitHub Pages\n", PAGES_DAY)
         self.assertIn(PAGES_OUTAGE, alert_keys(pages_only))
         everything = alert_keys(self.derive("GitHub\n", PAGES_DAY))
-        self.assertIn("169pg72gg9jr", everything)  # 28 Sep, Copilot Code Review: no Pages in it
-        self.assertNotIn("169pg72gg9jr", alert_keys(pages_only))
+        self.assertIn("cjwszcf57bff", everything)  # 6 Oct, Webhooks and Pull Requests: no Pages in it
+        self.assertNotIn("cjwszcf57bff", alert_keys(pages_only))
         self.assertLess(alert_keys(pages_only), everything)
 
     def test_a_generic_section_name_is_not_someone_elses_product(self):
@@ -196,26 +196,97 @@ class OutageAlerts(StoreCase):
         self.assertNotIn("dnslv7xdl4fj", keys)  # impact "none"
         self.assertIn("wq8305lppdc2", keys)     # impact "minor"
 
-    def test_the_cap_is_shared_with_the_vulnerability_alerts(self):
+    def test_the_cap_is_shared_but_a_big_outage_goes_over_it(self):
         self.load(CLOUDFLARE_DAY)  # NVD 21-22 Oct: Roundcube's 19 CVEs on 22 Oct
         self.pages(status_pages.CLOUDFLARE, CLOUDFLARE_DAY)
         items = self.derive("Roundcube = roundcube webmail\nCloudflare\n", CLOUDFLARE_DAY)
         on_22 = [i for i in items if " · " in i.title and i.happened_at.startswith("2026-10-22")]
-        self.assertEqual(len(on_22), my_stack.CAP_PER_DAY)
-        # A major outage outranks a new CVE; a minor one does not.
-        self.assertEqual(alert_keys(on_22), CLOUDFLARE_MAJORS)
+        self.assertEqual(alert_keys(on_22), CLOUDFLARE_MAJORS)  # the 4 minor outages share the 5 and lose
+        self.assertEqual(len(on_22), my_stack.CAP_PER_DAY + len(CLOUDFLARE_MAJORS))
         more = next(i.title for i in items if i.title.startswith("+") and "2026-10-22" in i.title)
-        self.assertTrue(more.startswith(f"+{19 + 6 - my_stack.CAP_PER_DAY} more"), more)
+        self.assertTrue(more.startswith(f"+{19 + 4 - my_stack.CAP_PER_DAY} more"), more)
 
-    def test_a_full_day_stays_full_when_outages_arrive_later(self):
+    def test_a_full_day_keeps_its_alerts_and_still_takes_a_big_outage(self):
         self.load(CLOUDFLARE_DAY)
         first = self.derive("Roundcube = roundcube webmail\n", CLOUDFLARE_DAY, save=True)
         shown = {i.id for i in first if " · " in i.title}
         self.pages(status_pages.CLOUDFLARE, CLOUDFLARE_DAY)
-        again = self.derive("Roundcube = roundcube webmail\nCloudflare\n", CLOUDFLARE_DAY)
-        on_22 = {i.id for i in again if " · " in i.title and i.happened_at.startswith("2026-10-22")}
-        self.assertEqual(on_22, shown)
-        self.assertTrue(any(i.title.startswith("+") and "2026-10-22" in i.title for i in again))
+        again = self.derive("Roundcube = roundcube webmail\nCloudflare\n", CLOUDFLARE_DAY, save=True)
+        on_22 = [i for i in again if " · " in i.title and i.happened_at.startswith("2026-10-22")]
+        self.assertLessEqual(shown, {i.id for i in on_22})
+        self.assertEqual(alert_keys(on_22), CLOUDFLARE_MAJORS)
+        # The big ones never use up the 5: the re-run changes nothing.
+        third = self.derive("Roundcube = roundcube webmail\nCloudflare\n", CLOUDFLARE_DAY)
+        self.assertEqual({i.id for i in third}, {i.id for i in again})
+
+    def test_an_outage_that_worsens_on_a_full_day_comes_out_of_the_more_line(self):
+        self.load(CLOUDFLARE_DAY)
+        self.derive("Roundcube = roundcube webmail\n", CLOUDFLARE_DAY, save=True)
+        day = {"started_at": "2026-10-22T10:00:00Z", "created_at": "2026-10-22T10:00:00Z", "resolved_at": None,
+               "status": "investigating", "components": [{"name": "Pages"}]}
+
+        def seen(impact):
+            self.store.save_items(status_pages.GITHUB.parse(
+                json.dumps({"incidents": [incident(impact=impact, **day)]}).encode(), CLOUDFLARE_DAY))
+            return alert_keys(self.derive("Roundcube = roundcube webmail\nGitHub\n", CLOUDFLARE_DAY))
+
+        self.assertEqual(seen("minor"), set())
+        self.assertEqual(seen("critical"), {"abcdef123456"})
+
+    def test_a_list_of_parts_still_hears_of_a_big_outage_that_names_no_part(self):
+        now = datetime(2026, 10, 28, 23, 0, tzinfo=timezone.utc)
+        self.pages(status_pages.CLOUDFLARE, now)
+        keys = alert_keys(self.derive("Catalogue = cloudflare workers, cloudflare d1\n", now))
+        self.assertIn("dk2obcyw2aew", keys)  # 27 Oct, major, ERR_TIMED_OUT for customers: no part named
+        minor_no_part = [json.loads(i.raw)["id"] for i in parsed(status_pages.CLOUDFLARE)
+                         if len(json.loads(i.raw)["names"]) == 1 and json.loads(i.raw)["impact"] == "minor"]
+        self.assertTrue(minor_no_part)
+        self.assertFalse(keys & set(minor_no_part))
+        self.assertEqual(self.derive("GitHub Pages\n", now), [])  # a part of another service
+
+    def test_days_away_lose_nothing_within_thirty_days(self):
+        back = datetime(2026, 10, 28, 23, 0, tzinfo=timezone.utc)
+        self.pages(status_pages.GITHUB, back)
+        self.pages(status_pages.CLOUDFLARE, back)
+        self.pages(status_pages.CLAUDE, back)
+        collector = my_stack.collector(self.watch("GitHub\nCloudflare\nClaude\n"))
+        self.store.save_items(collector.derive(self.store, back))
+        self.assertEqual(collector.panel.window, my_stack.LOOKBACK)
+        rows = self.store.items_between(my_stack.SOURCE, "2026-09-28", "2026-10-29", limit=my_stack.SCAN_LIMIT)
+        entries = panel_entries(self.store, Registry([collector]).panel("my-stack"), back)["entries"]
+        self.assertEqual(len(entries), len(rows))  # the oldest day is still on the Board
+        self.assertGreater(len(rows), 60)
+        days = {}
+        for row in rows:
+            data = json.loads(row["raw"])
+            if data["kind"] == "alert" and data["impact"] == "minor":
+                days[row["happened_at"][:10]] = days.get(row["happened_at"][:10], 0) + 1
+        self.assertLessEqual(max(days.values()), my_stack.CAP_PER_DAY)  # each day kept its own 5
+
+    def test_a_name_taken_off_the_list_leaves_the_board_and_frees_its_day(self):
+        self.load(CLOUDFLARE_DAY)
+        self.derive("Roundcube = roundcube webmail\n", CLOUDFLARE_DAY, save=True)
+        self.assertGreater(self.store.count_items(my_stack.SOURCE), my_stack.CAP_PER_DAY)  # five and a "+14 more"
+        self.pages(status_pages.CLOUDFLARE, CLOUDFLARE_DAY)
+        items = self.derive("Cloudflare\n", CLOUDFLARE_DAY, save=True)
+        rows = self.store.items_between(my_stack.SOURCE, "2026-10-01", "2026-10-29", limit=1000)
+        self.assertEqual({r["id"] for r in rows}, {i.id for i in items})
+        self.assertFalse([r for r in rows if "Roundcube" in r["title"] or r["title"].startswith("+14")])
+        on_22 = [r for r in rows if r["happened_at"].startswith("2026-10-22")]
+        self.assertEqual(len(on_22), 6)  # all six Cloudflare incidents: Roundcube's five freed the day
+
+    def test_a_renamed_entry_keeps_the_alert_and_its_day(self):
+        self.load(CLOUDFLARE_DAY)
+        first = self.derive("Roundcube = roundcube webmail\n", CLOUDFLARE_DAY, save=True)
+        again = self.derive("Mail = roundcube webmail\n", CLOUDFLARE_DAY, save=True)
+        self.assertEqual({(i.id, i.happened_at) for i in again}, {(i.id, i.happened_at) for i in first})
+        self.assertTrue(all(i.title.startswith(("Mail · ", "+")) for i in again))
+
+    def test_a_watchlist_that_cannot_be_read_wipes_nothing(self):
+        self.load(CLOUDFLARE_DAY)
+        first = self.derive("Roundcube = roundcube webmail\n", CLOUDFLARE_DAY, save=True)
+        self.assertEqual(my_stack.derive(self.store, CLOUDFLARE_DAY, self.dir / "missing.txt"), [])
+        self.assertEqual(self.store.count_items(my_stack.SOURCE), len(first))
 
 
 class Wiring(StoreCase):

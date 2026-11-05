@@ -61,9 +61,18 @@ Claude, Google Workspace) and checks whether they **name** one of these products
 - **Outages:** a status-page incident with some impact (minor or worse) alerts when its service or
   an affected part is on the list: `GitHub` takes every GitHub incident, `GitHub Pages` only those
   naming Pages; `Claude` (or `Anthropic = claude`), `Cloudflare`, `Google Workspace`, `Gmail`,
-  `Google Drive` work the same way. Incidents share the 5 a day; a crowded day keeps exploited
-  bugs first, then major or critical outages, then new vulnerabilities, then minor outages.
-- Carrd, Meta and banks publish no status feed World Watch can read, so they can't alert yet.
+  `Google Drive` work the same way. A list of parts still hears of a major outage that names no part.
+- **The 5 a day:** a crowded day keeps exploited bugs first, then new vulnerabilities, then minor
+  outages. Major and critical outages always show and take none of the 5, so a long absence can't
+  hide one in "+N more". Each day keeps its own 5, and the Board reaches back 30 days.
+- **Taking a name off the list** takes its alerts and "+N more" lines off the Board within 15 minutes
+  and frees their days. Renaming an entry keeps its alerts. An empty or unreadable list changes nothing.
+- **Away for days:** World Watch only collects while its window is open and the PC awake. On return
+  it catches up, and alerts land on the days they happened. Cloudflare's feed holds only its newest
+  50 incidents, about 13 days, so a longer gap can lose Cloudflare incidents; 30 days is the limit
+  for every alert.
+- Carrd and Meta publish no status feed World Watch can read, so they can't alert yet; banks
+  were not looked up.
 
 ## Other commands
 

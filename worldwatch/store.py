@@ -101,6 +101,11 @@ class Store:
             self.db.executemany(_INSERT_ITEM, [(*astuple(i), i.fetched_at) for i in items])
         return len(items)
 
+    def forget_items(self, ids: list[str]) -> None:
+        """For derived items nothing supports any more; a source's own records are never forgotten."""
+        with self.db:
+            self.db.executemany("DELETE FROM items WHERE id = ?", [(i,) for i in ids])
+
     def count_items(self, source: str | None = None) -> int:
         if source:
             return self.db.execute("SELECT COUNT(*) FROM items WHERE source = ?", (source,)).fetchone()[0]

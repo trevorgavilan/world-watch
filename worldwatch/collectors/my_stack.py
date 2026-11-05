@@ -9,9 +9,14 @@ a date). Once shown an alert stays, on the day it was shown under, and the rest 
 one "+N more" line. Every alert is basis "inferred": the match is ours, the facts are the sources'.
 
 Outages come the same way from the official status pages (status_pages.py): one alert per incident
-with some impact (minor or worse) on a service or part whose name is on the watchlist, sharing the
-same daily cap. When a day has more than the cap, the order is: exploited, then major or critical
-outages, then new vulnerabilities (by EPSS, then CVSS), then minor outages.
+with some impact (minor or worse) on a service or part whose name is on the watchlist. Minor ones
+share the daily cap; when a day has more than the cap the order is: exploited, then new
+vulnerabilities (by EPSS, then CVSS), then minor outages. A major or critical outage always shows
+and takes none of the 5: Trevor can be away for days, and it must not hide in "+N more". One that
+names no part reaches a list that watches any part of that service (D-21).
+
+Taking a name off the watchlist takes its alerts and the "+N more" lines off the Board and frees
+their day; an empty or unreadable list changes nothing.
 """
 
 from __future__ import annotations
@@ -38,8 +43,10 @@ CAP_PER_DAY = 5
 FUTURE_SLACK = timedelta(minutes=5)
 SCAN_LIMIT = 100_000
 NEW, EXPLOITED, OUTAGE = "new", "exploited", "outage"
-# Which alerts win a crowded day: a higher tier first (exploited 3, big outage 2, new CVE 1, small outage 0).
+# Which alerts win a crowded day: a higher tier first (exploited 3, new CVE 1, minor outage 0).
 OUTAGE_WEIGHT = {"minor": 0.5, "major": 0.75, "critical": 1.0}  # impact "none" raises no alert
+BIG_OUTAGES = ("major", "critical")  # over the cap: never competes for the 5
+PANEL_LIMIT = 300  # 30 days of 5 alerts and a "+N more" line, and room for the big outages
 
 
 @dataclass
@@ -123,6 +130,7 @@ class Alert:
     item: Item
     day: str
     rank: tuple
+    over_cap: bool = False
 
 
 def _day(happened_at: str) -> str:
@@ -190,6 +198,18 @@ def _alerts(store, ev: Evidence, now: datetime) -> list[Alert]:
     return out
 
 
+def _no_part_hit(entries, names, impact) -> tuple[str, str] | None:
+    """A big outage naming only the service reaches a list of its parts: it may be any of them."""
+    if impact not in BIG_OUTAGES or not isinstance(names, list) or len(names) != 1:
+        return None
+    pair = names[0]
+    name = watchlist.Name.of(*pair) if isinstance(pair, list) and len(pair) == 2 else None
+    for entry in entries if name else []:
+        if entry.watches_part_of(name):
+            return entry.name, f"{name.label} (no part named)"
+    return None
+
+
 def _outage_alerts(store, entries, now: datetime) -> list[Alert]:
     """One alert per status-page incident that names a watched service or part of one."""
     out = []
@@ -199,7 +219,7 @@ def _outage_alerts(store, entries, now: datetime) -> list[Alert]:
             impact = data.get("impact")
             if data.get("kind") != "incident" or impact not in OUTAGE_WEIGHT:
                 continue
-            hit = _match(entries, data.get("names"))
+            hit = _match(entries, data.get("names")) or _no_part_hit(entries, data.get("names"), impact)
             if not hit:
                 continue
             entry, matched = hit
@@ -216,8 +236,7 @@ def _outage_alerts(store, entries, now: datetime) -> list[Alert]:
                      "sources": [source], "impact": impact},
                 basis="inferred", lang="en",
             )
-            tier = 2 if impact in ("major", "critical") else 0
-            out.append(Alert(item, _day(item.happened_at), (tier, OUTAGE_WEIGHT[impact], 0.0)))
+            out.append(Alert(item, _day(item.happened_at), (0, OUTAGE_WEIGHT[impact], 0.0), impact in BIG_OUTAGES))
     return out
 
 
@@ -239,13 +258,24 @@ def derive(store, now: datetime, path: Path) -> list[Item]:
         return []
     alerts = [a for ev in gather(store, entries, now).values() for a in _alerts(store, ev, now)]
     alerts += _outage_alerts(store, entries, now)
+    derived = {a.item.id for a in alerts}
+    listed = {e.name for e in entries}
     shown: dict[str, str] = {}  # alert id -> the time it was shown under (its day never moves)
     shown_per_day: dict[str, int] = {}
+    gone: list[str] = []  # alerts of a name taken off the list
+    old_lines: list[str] = []  # "+N more" lines: each run says them afresh
     for row in store.items_between(SOURCE, iso_utc(now - LOOKBACK - timedelta(days=1)),  # frozen times run early
                                    iso_utc(now + FUTURE_SLACK), limit=SCAN_LIMIT):
-        if _raw(row).get("kind") == "alert":
+        data = _raw(row)
+        if data.get("kind") == "overflow":
+            old_lines.append(row["id"])
+        elif data.get("kind") == "alert":
+            if row["id"] not in derived and data.get("entry") not in listed:
+                gone.append(row["id"])
+                continue
             shown[row["id"]] = row["happened_at"]
-            shown_per_day[_day(row["happened_at"])] = shown_per_day.get(_day(row["happened_at"]), 0) + 1
+            if data.get("impact") not in BIG_OUTAGES:
+                shown_per_day[_day(row["happened_at"])] = shown_per_day.get(_day(row["happened_at"]), 0) + 1
     items: list[Item] = []
     by_day: dict[str, list[Alert]] = {}
     for alert in alerts:
@@ -258,13 +288,17 @@ def derive(store, now: datetime, path: Path) -> list[Item]:
         room = CAP_PER_DAY - shown_per_day.get(day, 0)
         hidden = []
         for alert in sorted(group, key=lambda a: (a.rank, a.item.happened_at, a.item.id), reverse=True):
-            if room > 0:
+            if alert.over_cap:
+                items.append(alert.item)
+            elif room > 0:
                 items.append(alert.item)
                 room -= 1
             else:
                 hidden.append(alert)
         if hidden:
             items.append(_overflow(day, hidden, now))
+    kept = {i.id for i in items}
+    store.forget_items(gone + [line for line in old_lines if line not in kept])
     return items
 
 
@@ -278,7 +312,7 @@ def collector(path: Path) -> Collector:
         parse_records=lambda data, fetched_at: [],
         derive=partial(_derive_logged, path=path),
         panel=Panel(id="my-stack", en="Your stack — alerts", es="Tu stack — alertas",
-                    window=timedelta(days=14), limit=30, date_only=True),
+                    window=LOOKBACK, limit=PANEL_LIMIT, date_only=True),
     )
 
 
