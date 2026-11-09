@@ -235,6 +235,10 @@
     $("view-map").setAttribute("aria-pressed", String(!globe));
     $("view-globe").setAttribute("aria-pressed", String(globe));
     if (globe) loadGlobe();
+    if (state.globe) {  // a hidden globe stops drawing
+      if (globe) state.globe.resumeAnimation();
+      else state.globe.pauseAnimation();
+    }
     if (keep) remember(VIEW_KEY, state.view);
   }
 
@@ -423,7 +427,12 @@
       state.loaded = true;
     } catch (err) {
       status("Could not read the store: " + err.message + " (showing what was last loaded)", true);
-      if (!state.loaded) setTimeout(load, FIRST_RETRY_MS);  // nothing on screen yet: don't wait a whole minute
+      if (!state.loaded && !state.retry) {  // nothing on screen yet: don't wait a whole minute (one timer only)
+        state.retry = setTimeout(() => {
+          state.retry = null;
+          load();
+        }, FIRST_RETRY_MS);
+      }
     }
   }
 
