@@ -270,7 +270,7 @@ class FlatMap(unittest.TestCase):
         self.b.run("document.querySelector('#go-mexico').click()")
         self.settle()
         here = self.b.run(f"WWMap.current.at({CDMX[0]}, {CDMX[1]})")
-        x, y = self.page_xy({"x": 300, "y": 300})
+        x, y = self.page_xy(here)  # starting on the CDMX mark, which a click would select
         self.b.drag(x, y, x + 120)
         moved = self.b.run(f"WWMap.current.at({CDMX[0]}, {CDMX[1]})")
         self.assertAlmostEqual(moved["x"], here["x"] + 120, delta=2)
@@ -314,6 +314,83 @@ class FlatMap(unittest.TestCase):
     def test_each_layer_in_the_list_shows_its_pin_shape(self):
         self.assertEqual(self.b.run("document.querySelectorAll('#layers .swatch').length"),
                          self.b.run("document.querySelectorAll('#layers input').length"))
+
+    def test_back_from_the_globe_in_the_same_page_the_map_fills_its_place(self):
+        self.b.run("document.querySelector('#view-globe').click()")
+        self.b.wait_for("document.querySelector('#globe canvas') !== null")
+        self.b.run("document.querySelector('#view-map').click()")
+        self.settle()
+        self.assertAlmostEqual(self.b.run("document.querySelector('#map canvas').getBoundingClientRect().width"),
+                               self.b.run("document.querySelector('#stage').getBoundingClientRect().width"), delta=1)
+        self.assertTrue(self.marks(kind="cdmx"))
+
+    # -- review round: gestures and screens --------------------------------------------------------
+
+    def test_merging_needs_four_fires_in_one_spot(self):
+        groups = self.b.run("(() => { const at = (n) => Array.from({ length: n }, (_, i) =>"
+                            " ({ x: 100 + i, y: 100, point: { id: 'f' + i } }));"
+                            " return [3, 4].map((n) => WWPins.group(at(n), true).map((g) => g.members.length))"
+                            ".concat([WWPins.group(at(4), false).map((g) => g.members.length)]); })()")
+        self.assertEqual(groups, [[1, 1, 1], [4], [1, 1, 1, 1]])
+
+    def test_a_sideways_swipe_does_not_zoom(self):
+        x, y = self.page_xy({"x": 400, "y": 250})
+        before = self.view()["s"]
+        self.b.call("Input.dispatchMouseEvent", type="mouseWheel", x=x, y=y, deltaX=120, deltaY=0)
+        self.settle()
+        self.assertEqual(self.view()["s"], before)
+
+    def test_a_screen_with_another_scaling_redraws_sharp(self):
+        try:
+            self.b.call("Emulation.setDeviceMetricsOverride", width=1280, height=800, deviceScaleFactor=2, mobile=False)
+            self.b.run("document.querySelector('#zoom-in').click()")  # any redraw notices the new scaling
+            self.b.wait_for("(() => { const c = document.querySelector('#map canvas');"
+                            " return c.width === Math.round(c.getBoundingClientRect().width * 2); })()", timeout=5)
+        finally:
+            self.b.size(1280, 800)
+
+
+@unittest.skipUnless(EXE, "no Edge or Chrome on this machine")
+class FirstLoad(unittest.TestCase):
+    """A Board opened before the store can be read tries again in 3 s, with one timer only (the review round)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = temp_dir() / "worldwatch.sqlite3"  # not there yet
+        cls.srv = start(cls.db, all_collectors(temp_dir()), now=NOW)
+        cls.addClassCleanup(cls.srv.server_close)
+        cls.addClassCleanup(cls.srv.shutdown)
+        cls.b = Browser(EXE)
+        cls.addClassCleanup(cls.b.close)
+
+    def test_it_retries_soon_without_stacking_and_recovers(self):
+        url = f"http://127.0.0.1:{self.srv.server_port}/"
+        # The 60 s refresh every second instead: each failed refresh must not start one more retry chain.
+        fast = self.b.before_each_page("const realEvery = window.setInterval; window.setInterval = (f) => realEvery(f, 1000);"
+                                       " window.__asked = 0; const realFetch = window.fetch;"
+                                       " window.fetch = (u, o) => { if (String(u) === '/api/board') window.__asked += 1;"
+                                       " return realFetch(u, o); };")
+        try:
+            self.b.open(url, "document.querySelector('#status').className === 'error'")
+            self.b.run("new Promise((r) => setTimeout(r, 10000))")
+            asked = self.b.run("window.__asked")
+            self.assertLessEqual(asked, 16, "about 1 + 10 refreshes + 3 retries; stacked retries make 25 or more")
+            self.assertGreaterEqual(asked, 12)
+        finally:
+            self.b.forget_script(fast)
+        self.b.open(url, "document.querySelector('#status').className === 'error'")
+        map_store_at(self.db)
+        self.b.wait_for("document.querySelectorAll('#layers li input').length > 0", timeout=5)
+
+
+def map_store_at(path):
+    """The map's store, copied to `path` (an SQLite backup, never a half-written file)."""
+    import sqlite3
+    src = sqlite3.connect(map_store())
+    dst = sqlite3.connect(path)
+    src.backup(dst)
+    dst.close()
+    src.close()
 
 
 if __name__ == "__main__":

@@ -31,7 +31,7 @@ window.WWMap = (() => {
     box.append(canvas, tip);
     const ctx = canvas.getContext("2d");
 
-    const v = { s: 1, ox: 0, oy: 0, w: 0, h: 0 };  // px per degree; where lon -180 / lat 90 sits on screen
+    const v = { s: 1, ox: 0, oy: 0, w: 0, h: 0, dpr: 1 };  // px per degree; where lon -180 / lat 90 sits on screen
     let layers = [];      // [{ id, points }] in the order to draw, shown ones only
     let alerts = [];      // the near-CDMX panel's entries
     let marks = [];       // what the last frame drew, for hover and click, top-most last
@@ -39,6 +39,7 @@ window.WWMap = (() => {
     let queued = false;
     let drag = null;
     let fitted = false;
+    let pointer = null;   // where the mouse rests, so the tip follows a zoom or a refresh
 
     const toX = (lon) => v.ox + (lon + 180) * v.s;
     const toY = (lat) => v.oy + (90 - lat) * v.s;
@@ -85,9 +86,9 @@ window.WWMap = (() => {
       const h = box.clientHeight;
       if (!w || !h) return;  // hidden behind the globe
       const keep = fitted ? { lon: lonAt(v.w / 2), lat: latAt(v.h / 2), zoom: v.s / minScale() } : null;
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = Math.round(w * dpr);
-      canvas.height = Math.round(h * dpr);
+      v.dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(w * v.dpr);
+      canvas.height = Math.round(h * v.dpr);
       canvas.style.width = w + "px";
       canvas.style.height = h + "px";
       v.w = w;
@@ -98,6 +99,16 @@ window.WWMap = (() => {
         fitted = true;
         show("world");
       }
+      draw();  // now, not next frame: setting the size just blanked the canvas
+    }
+
+    /* A move to a screen with another scaling changes no size, so the observer never hears of it. */
+    function watchScaling() {
+      const query = window.matchMedia("(resolution: " + (window.devicePixelRatio || 1) + "dppx)");
+      query.addEventListener("change", () => {
+        resize();
+        watchScaling();
+      }, { once: true });
     }
 
     function drawBase() {
@@ -170,8 +181,11 @@ window.WWMap = (() => {
     function draw() {
       queued = false;
       if (!v.w) return;
-      const dpr = window.devicePixelRatio || 1;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if ((window.devicePixelRatio || 1) !== v.dpr) {  // the scaling changed under us: size the canvas again
+        resize();
+        return;
+      }
+      ctx.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
       drawBase();
       marks = [];
       drawRings();
@@ -206,6 +220,7 @@ window.WWMap = (() => {
         marks.push({ kind: "pin", layer: m.layer, x: head.x, y: head.y, r: head.r, point: m.point,
           label: m.style.label });
       }
+      if (pointer && !drag) showTip(hit(pointer.x, pointer.y), pointer.x, pointer.y);
     }
 
     function redraw() {
@@ -267,6 +282,7 @@ window.WWMap = (() => {
     });
     canvas.addEventListener("pointermove", (e) => {
       const p = where(e);
+      pointer = p;
       if (!drag) {
         showTip(hit(p.x, p.y), p.x, p.y);
         return;
@@ -292,11 +308,17 @@ window.WWMap = (() => {
     };
     canvas.addEventListener("pointerup", end);
     canvas.addEventListener("pointercancel", end);
-    canvas.addEventListener("pointerleave", () => { if (!drag) showTip(null); });
+    canvas.addEventListener("lostpointercapture", end);  // never left panning on a plain mouse move
+    canvas.addEventListener("pointerleave", () => {
+      pointer = null;
+      if (!drag) showTip(null);
+    });
     canvas.addEventListener("wheel", (e) => {
       e.preventDefault();
+      if (!e.deltaY) return;  // a sideways swipe is not a zoom
       const p = where(e);
-      zoomAt(e.deltaY < 0 ? 1.25 : 0.8, p.x, p.y);
+      const px = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;  // lines, not pixels
+      zoomAt(Math.min(Math.max(Math.pow(1.25, -px / 100), 0.5), 2), p.x, p.y);  // a notch is 1.25x; a pinch is gentle
     }, { passive: false });
     canvas.addEventListener("dblclick", (e) => {
       const p = where(e);
@@ -321,21 +343,26 @@ window.WWMap = (() => {
       e.preventDefault();
     });
 
-    const img = new Image();
-    img.addEventListener("load", () => {
-      const c = document.createElement("canvas");
-      c.width = img.naturalWidth;
-      c.height = img.naturalHeight;
-      const g = c.getContext("2d");
-      g.filter = "brightness(0.62) saturate(0.75)";  // dimmed, so the pins carry the colour
-      g.drawImage(img, 0, 0);
-      base = c;
-      canvas.dataset.base = "loaded";
-      redraw();
-    });
-    img.src = "/static/earth.jpg";
+    /* Its own function, so the decoded image is let go once its dimmed copy is made. */
+    function loadBase() {
+      const img = new Image();
+      img.addEventListener("load", () => {
+        const c = document.createElement("canvas");
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        const g = c.getContext("2d");
+        g.filter = "brightness(0.62) saturate(0.75)";  // dimmed, so the pins carry the colour
+        g.drawImage(img, 0, 0);
+        base = c;
+        canvas.dataset.base = "loaded";
+        redraw();
+      });
+      img.src = "/static/earth.jpg";
+    }
 
+    loadBase();
     new ResizeObserver(resize).observe(box);  // the window, the divider, or coming back from the globe
+    watchScaling();
     resize();
 
     const api = {
