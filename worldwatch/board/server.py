@@ -49,6 +49,8 @@ _HERE = Path(__file__).resolve().parent / "static"
 STATIC: dict[str, tuple[Path, str]] = {  # served name -> (file, type); nothing else is ever read
     "board.js": (_HERE / "board.js", "text/javascript; charset=utf-8"),
     "board.css": (_HERE / "board.css", "text/css; charset=utf-8"),
+    "map.js": (_HERE / "map.js", "text/javascript; charset=utf-8"),
+    "pins.js": (_HERE / "pins.js", "text/javascript; charset=utf-8"),
     "globe.gl.min.js": (_HERE / "vendor" / "globe.gl-2.46.2.min.js", "text/javascript; charset=utf-8"),
     "earth.jpg": (_HERE / "vendor" / "earth-blue-marble-5400x2700.jpg", "image/jpeg"),
 }

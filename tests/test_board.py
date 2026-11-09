@@ -216,10 +216,10 @@ class Csp(BoardCase):
 
 class NoOutsideRequests(BoardCase):
     def test_page_files_name_no_other_host(self):
-        for name in ("board.html", "board.js", "board.css"):
+        for name in ("board.html", "board.js", "map.js", "pins.js", "board.css"):
             text = (STATIC / name).read_text(encoding="utf-8")
             self.assertIsNone(re.search(r"(?i)\b(https?:)?//[a-z0-9]", text), name)
-            if name != "board.js":  # in CSS, url() and @import may name only this server's own files
+            if name.endswith((".css", ".html")):  # in CSS, url() and @import may name only this server's own files
                 self.assertIsNone(re.search(r"(?i)@import|url\(\s*['\"]?(?!/static/)", text), name)
 
     def test_policy_lets_the_page_reach_only_itself(self):
@@ -277,9 +277,11 @@ class TextNotHtml(unittest.TestCase):
         self.assertIn(HOSTILE, titles)
 
     def test_page_script_never_writes_html(self):
+        for name in ("board.js", "map.js", "pins.js"):
+            self.assertNotRegex((STATIC / name).read_text(encoding="utf-8"),
+                                r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function|"
+                                r"setAttribute\(\s*['\"](on|style|href)", name)
         js = (STATIC / "board.js").read_text(encoding="utf-8")
-        self.assertNotRegex(js, r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function|"
-                                r"setAttribute\(\s*['\"](on|style|href)")
         self.assertIn(".pointLabel(null)", js, "globe.gl renders a point label as HTML: it must stay off")
         self.assertEqual(js.count("Label("), 1, "no other label accessor")
         self.assertIsNone(re.search(r"htmlElement|labelsData|Label\s*:", js), "no globe.gl HTML layers")
@@ -303,6 +305,8 @@ class TextNotHtml(unittest.TestCase):
         js = (STATIC / "board.js").read_text(encoding="utf-8")
         self.assertEqual(len(re.findall(r"\.href\s*=", js)), 1, "one place sets a link")
         self.assertIsNotNone(re.search(r"\.href\s*=\s*safe", js))
+        for name in ("map.js", "pins.js"):  # the map hands a picked point to board.js; it never makes a link
+            self.assertIsNone(re.search(r"\.href\s*=|\.src\s*=(?!\s*[\"']/static/)", (STATIC / name).read_text(encoding="utf-8")), name)
 
 
 class ReadOnly(BoardCase):
@@ -344,6 +348,7 @@ class StaticFiles(BoardCase):
 
     def test_page_and_its_files_are_served_with_their_types(self):
         for path, kind in (("/", "text/html"), ("/static/board.js", "text/javascript"),
+                           ("/static/map.js", "text/javascript"), ("/static/pins.js", "text/javascript"),
                            ("/static/board.css", "text/css"), ("/static/globe.gl.min.js", "text/javascript"),
                            ("/static/earth.jpg", "image/jpeg")):
             resp, data = request(self.srv, path)

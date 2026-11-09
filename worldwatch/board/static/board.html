@@ -6,7 +6,8 @@
 <meta name="referrer" content="no-referrer">
 <title>World Watch Board</title>
 <link rel="stylesheet" href="/static/board.css">
-<script src="/static/globe.gl.min.js" defer></script>
+<script src="/static/pins.js" defer></script>
+<script src="/static/map.js" defer></script>
 <script src="/static/board.js" defer></script>
 </head>
 <body>
@@ -18,7 +19,22 @@
 </header>
 <p id="fresh-detail" class="fresh-detail" role="status" hidden></p>
 <main id="board" class="board">
-  <section id="globe" class="globe" aria-label="Globe"></section>
+  <section id="stage" class="stage" aria-label="Map and globe">
+    <div class="tools">
+      <div class="seg" role="group" aria-label="View">
+        <button id="view-map" type="button" data-key="view:map" aria-pressed="true">Map</button>
+        <button id="view-globe" type="button" data-key="view:globe" aria-pressed="false">Globe</button>
+      </div>
+      <div id="map-tools" class="seg" role="group" aria-label="Map controls">
+        <button id="go-world" type="button">World</button>
+        <button id="go-mexico" type="button">Mexico</button>
+        <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+        <button id="zoom-out" type="button" aria-label="Zoom out">&minus;</button>
+      </div>
+    </div>
+    <div id="map" class="map"></div>
+    <div id="globe" class="globe" hidden></div>
+  </section>
   <div id="divider" class="divider" role="separator" tabindex="0" aria-orientation="vertical"
        aria-controls="side" aria-label="Resize the lists"
        title="Drag, or use the arrow keys (Home, End), to share the space; double-click for the default"></div>
