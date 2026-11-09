@@ -46,7 +46,8 @@ MUTANTS = [
     ("markdown: link syntax not escaped", "worldwatch/recon_md.py",
      r'_MD_SPECIAL = re.compile(r"([\\`*_{}\[\]()#+!|<>~])")', r'_MD_SPECIAL = re.compile(r"([\\`*_#+!|<>~])")'),
     ("recon: date-only KEV shifted to CDMX time", "worldwatch/recon.py",
-     'DATE_ONLY_SOURCES = {"cisa-kev", "first-epss", "my-stack"}', 'DATE_ONLY_SOURCES = {"first-epss", "my-stack"}'),
+     'DATE_ONLY_SOURCES = {"cisa-kev", "first-epss", "my-stack", "smn-cdmx"}',
+     'DATE_ONLY_SOURCES = {"first-epss", "my-stack", "smn-cdmx"}'),
     ("http: 429 not recognised", "worldwatch/http.py",
      "if err.code == 429:", "if err.code == 999:"),
     # D-18: started by World Watch.bat whenever the PC is on — catch up after any gap, say when alive.
@@ -183,7 +184,7 @@ MUTANTS = [
     ("alerts: an unreadable list wipes the alerts", "worldwatch/collectors/my_stack.py",
      "    if not entries:\n        log.debug(", "    if False:\n        log.debug("),
     ("wiring: the status pages are not in the run", "worldwatch/collectors/__init__.py",
-     "epss.COLLECTOR, *status_pages.COLLECTORS]", "epss.COLLECTOR]"),
+     "epss.COLLECTOR, *status_pages.COLLECTORS,", "epss.COLLECTOR,"),
     # Board layout: a split kept per browser and always sane, lists that fold, a one-row strip, D-17 intact.
     ("layout: the dragged split is not remembered", "worldwatch/board/static/board.js",
      "if (state.side !== null) remember(SIDE_KEY, String(state.side));", ""),
