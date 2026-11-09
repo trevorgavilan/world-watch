@@ -1,4 +1,4 @@
-"""The Board's layout in a real browser: a draggable globe / list divider remembered per browser,
+"""The Board's layout in a real browser: a draggable map / list divider remembered per browser,
 lists that fold, and a source strip that stays one row (Trevor, 28 Oct: "things should be resizable").
 
 Each test opens the real page from a real Board server in headless Edge, with the page's own CSP.
@@ -17,7 +17,7 @@ from worldwatch.store import Store
 EXE = find_browser()
 READY = "document.querySelectorAll('#panels .box').length > 0 && document.querySelectorAll('#fresh .dot').length > 0"
 SIDE = "document.querySelector('.side').getBoundingClientRect().width"
-GLOBE = "document.querySelector('#globe').getBoundingClientRect().width"
+STAGE = "document.querySelector('#stage').getBoundingClientRect().width"  # the map, or the globe
 # Every policy breach the page causes. globe.gl's own <style> tags are the one known, harmless kind (FINDINGS).
 WATCH_CSP = ("window.__csp = []; document.addEventListener('securitypolicyviolation', "
              "(e) => window.__csp.push(e.effectiveDirective + ' ' + e.blockedURI));")
@@ -106,15 +106,15 @@ class Layout(unittest.TestCase):
         x, y = self.divider_centre()
         self.b.drag(x, y, x - 200)
         self.assertAlmostEqual(self.b.run(SIDE), before + 200, delta=2)
-        self.b.wait_for("Math.abs(document.querySelector('#globe canvas').getBoundingClientRect().width - "
-                        f"{GLOBE}) < 2", timeout=5)  # the globe redraws at its new size
+        self.b.wait_for("Math.abs(document.querySelector('#map canvas').getBoundingClientRect().width - "
+                        f"{STAGE}) < 2", timeout=5)  # the map redraws at its new size
         self.reload()
         self.assertAlmostEqual(self.b.run(SIDE), before + 200, delta=2, msg="the split is remembered")
 
     def test_home_and_end_take_the_divider_to_its_limits(self):
         self.b.run("document.querySelector('#divider').focus()")
         self.b.key("Home", "Home", 36)
-        self.assertAlmostEqual(self.b.run(GLOBE), 300, delta=1)
+        self.assertAlmostEqual(self.b.run(STAGE), 300, delta=1)
         self.b.key("End", "End", 35)
         self.assertAlmostEqual(self.b.run(SIDE), 260, delta=1)
 
@@ -134,21 +134,21 @@ class Layout(unittest.TestCase):
         self.b.key("ArrowRight", "ArrowRight", 39)
         self.assertAlmostEqual(self.b.run(SIDE), before, delta=2)
 
-    def test_the_split_keeps_the_globe_and_lists_on_screen(self):
+    def test_the_split_keeps_the_map_and_lists_on_screen(self):
         x, y = self.divider_centre()
-        self.b.drag(x, y, 5)  # far left: the lists would swallow the globe
-        self.assertGreaterEqual(self.b.run(GLOBE), 300)
+        self.b.drag(x, y, 5)  # far left: the lists would swallow the map
+        self.assertGreaterEqual(self.b.run(STAGE), 300)
         x, y = self.divider_centre()
         self.b.drag(x, y, 1275)  # far right: the lists would vanish
         self.assertGreaterEqual(self.b.run(SIDE), 260)
 
-    def test_a_smaller_window_never_hides_the_globe(self):
+    def test_a_smaller_window_never_hides_the_map(self):
         self.b.size(1910, 900)
         self.reload()
         x, y = self.divider_centre()
         self.b.drag(x, y, 600)
         self.b.size(1000, 800)
-        self.b.wait_for(f"{GLOBE} >= 300", timeout=5)
+        self.b.wait_for(f"{STAGE} >= 300", timeout=5)
         self.assertGreaterEqual(self.b.run(SIDE), 260)
 
     def test_junk_in_storage_never_breaks_the_layout(self):
@@ -159,7 +159,7 @@ class Layout(unittest.TestCase):
                            f"localStorage.setItem('ww.board.folded', {json.dumps(folded)})")
                 self.reload()
                 self.assertGreaterEqual(self.b.run(SIDE), 260, (side, folded))
-                self.assertGreaterEqual(self.b.run(GLOBE), 300, (side, folded))
+                self.assertGreaterEqual(self.b.run(STAGE), 300, (side, folded))
                 self.assertTrue(self.b.run("[...document.querySelectorAll('#panels ol')].every((o) => !o.hidden)"),
                                 (side, folded))
 
@@ -182,7 +182,7 @@ class Layout(unittest.TestCase):
         self.b.size(700, 900)
         self.reload()
         self.assertFalse(self.b.run("document.querySelector('#divider').offsetParent !== null"))
-        self.assertAlmostEqual(self.b.run(SIDE), self.b.run(GLOBE), delta=2)
+        self.assertAlmostEqual(self.b.run(SIDE), self.b.run(STAGE), delta=2)
 
     # -- folding lists -----------------------------------------------------------------------------
 
@@ -211,11 +211,17 @@ class Layout(unittest.TestCase):
         x, y = self.divider_centre()
         self.b.drag(x, y, x - 50)
         self.b.run("document.querySelector('#panels .fold').click(); document.querySelector('#fresh .dot').click()")
+        self.b.run("document.querySelector('#go-mexico').click(); document.querySelector('#zoom-in').click()")
+        self.assertEqual(self.b.run("window.__csp"), [], "the map view breaks no rule at all")
+        self.b.run("document.querySelector('#view-globe').click()")
+        self.b.wait_for("document.querySelector('#globe canvas') !== null", timeout=20)
         breaches = self.b.run("window.__csp")
         self.assertIn("style-src-elem inline", breaches, "the watch saw nothing: it never ran")
         self.assertTrue(all(b == "style-src-elem inline" for b in breaches), breaches)
 
     def test_the_page_asks_nothing_of_any_host_but_its_own(self):
+        self.b.run("document.querySelector('#view-globe').click()")  # the globe's library and image too
+        self.b.wait_for("document.querySelector('#globe canvas') !== null", timeout=20)
         hosts = self.b.run("[...new Set(performance.getEntriesByType('resource').map((e) => new URL(e.name).host))]")
         self.assertEqual(hosts, [f"127.0.0.1:{self.srv.server_port}"])
 

@@ -1,15 +1,19 @@
 /* World Watch Board. Everything comes from this server's read-only /api/ routes.
    Source text is data: it is only ever set with textContent, and a link is used only after
    safe() re-checks it as http(s) (D-17). globe.gl renders point labels as HTML, so they stay off.
-   The layout (the globe / list split, folded lists) is remembered in this browser's localStorage. */
+   The flat map (map.js, pins.js) is the main view; the globe is loaded only when asked for.
+   The layout (the view, the map / list split, folded lists) is remembered in this browser's localStorage. */
 "use strict";
 
 (() => {
   const TZ = "America/Mexico_City";
   const REFRESH_MS = 60 * 1000;
+  const FIRST_RETRY_MS = 3 * 1000;
   const $ = (id) => document.getElementById(id);
   const SIDE_KEY = "ww.board.side";      // the list column's width, in px
   const FOLD_KEY = "ww.board.folded";    // the ids of the folded lists
+  const VIEW_KEY = "ww.board.view";      // "map" or "globe"
+  const ALERT_PANEL = "near-cdmx";       // its entries turn the CDMX mark on the map red
   const SIDE_MIN = 260;
   const GLOBE_MIN = 300;
   const KEY_STEP = 20;
@@ -20,7 +24,7 @@
   const day = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "2-digit", month: "short", year: "numeric" });
 
   const state = {
-    globe: null, layers: [], shown: {}, points: {}, now: null,
+    globe: null, map: null, view: "map", layers: [], shown: {}, points: {}, now: null,
     side: null, folded: new Set(), sources: [], detail: null,
   };
 
@@ -192,6 +196,48 @@
     return "hsl(" + Math.round(55 - 55 * w) + ", 95%, " + Math.round(62 - 12 * w) + "%)";
   }
 
+  function makeMap() {
+    if (!window.WWMap || !window.WWPins) {
+      status("The map script did not load.", true);
+      return null;
+    }
+    const map = window.WWMap.create($("map"), pick);
+    $("go-world").addEventListener("click", () => map.show("world"));
+    $("go-mexico").addEventListener("click", () => map.show("mexico"));
+    $("zoom-in").addEventListener("click", () => map.zoom(1.5));
+    $("zoom-out").addEventListener("click", () => map.zoom(1 / 1.5));
+    return map;
+  }
+
+  /* globe.gl is 1.9 MB: it is fetched (from this server) the first time the globe is shown. */
+  function loadGlobe() {
+    if (state.globe || state.globeLoading) return;
+    state.globeLoading = true;
+    const script = document.createElement("script");
+    script.src = "/static/globe.gl.min.js";
+    script.addEventListener("load", () => {
+      state.globe = makeGlobe();
+      drawPoints();
+    });
+    script.addEventListener("error", () => {
+      state.globeLoading = false;
+      status("The globe library did not load.", true);
+    });
+    document.head.append(script);
+  }
+
+  function setView(view, keep) {
+    state.view = view === "globe" ? "globe" : "map";
+    const globe = state.view === "globe";
+    $("map").hidden = globe;
+    $("map-tools").hidden = globe;
+    $("globe").hidden = !globe;
+    $("view-map").setAttribute("aria-pressed", String(!globe));
+    $("view-globe").setAttribute("aria-pressed", String(globe));
+    if (globe) loadGlobe();
+    if (keep) remember(VIEW_KEY, state.view);
+  }
+
   function makeGlobe() {
     if (typeof Globe !== "function") {
       status("The globe library did not load.", true);
@@ -242,12 +288,10 @@
   }
 
   function drawPoints() {
-    if (!state.globe) return;
-    const all = [];
-    for (const layer of state.layers) {
-      if (state.shown[layer.id] !== false) all.push(...(state.points[layer.id] || []));
-    }
-    state.globe.pointsData(all);
+    const shown = state.layers.filter((layer) => state.shown[layer.id] !== false)
+      .map((layer) => ({ id: layer.id, points: state.points[layer.id] || [] }));
+    if (state.map) state.map.setLayers(shown);
+    if (state.globe) state.globe.pointsData(shown.flatMap((layer) => layer.points));
   }
 
   function drawLayers() {
@@ -264,7 +308,9 @@
       });
       const label = el("label");
       const count = (state.points[layer.id] || []).length;
-      label.append(box, el("span", layer.en + " · " + layer.es), el("span", "(" + count + ", " + layer.source + ")", "count"));
+      label.append(box);
+      if (window.WWPins) label.append(window.WWPins.swatch(layer.id));
+      label.append(el("span", layer.en + " · " + layer.es), el("span", "(" + count + ", " + layer.source + ")", "count"));
       const item = el("li");
       item.append(label);
       list.append(item);
@@ -367,13 +413,17 @@
       drawFreshness(board.sources);
       drawLayers();
       drawPoints();
+      const alertAt = board.panels.findIndex((p) => p.id === ALERT_PANEL);
+      if (state.map) state.map.setAlerts(alertAt >= 0 ? panelBodies[alertAt].entries : []);
       if (focused) {  // the refresh rebuilt the dot, fold or box the keyboard was on: stay on it
         const again = [...document.querySelectorAll("[data-key]")].find((n) => n.dataset.key === focused);
         if (again) again.focus();
       }
       status("Updated " + when(board.now, false) + " · from the local store only", false);
+      state.loaded = true;
     } catch (err) {
       status("Could not read the store: " + err.message + " (showing what was last loaded)", true);
+      if (!state.loaded) setTimeout(load, FIRST_RETRY_MS);  // nothing on screen yet: don't wait a whole minute
     }
   }
 
@@ -386,7 +436,10 @@
       drawDetail();
     }
   });
-  state.globe = makeGlobe();
+  state.map = makeMap();
+  $("view-map").addEventListener("click", () => setView("map", true));
+  $("view-globe").addEventListener("click", () => setView("globe", true));
+  setView(recall(VIEW_KEY), false);
   load();
   setInterval(load, REFRESH_MS);
 })();
