@@ -37,6 +37,12 @@ CREDITS = [
     ("nvd-cves", "This product uses data from the NVD API but is not endorsed or certified by the NVD.", "https://nvd.nist.gov/"),
     ("osv-bitnami", "OSV.dev — Bitnami Vulnerability Database (Apache 2.0)", "https://osv.dev/"),
     ("first-epss", "EPSS by FIRST.org", "https://www.first.org/epss/"),
+    ("ssn-quakes", "Datos: Servicio Sismológico Nacional (México), Instituto de Geofísica, UNAM", "http://www.ssn.unam.mx/"),
+    ("gdacs", "GDACS — Global Disaster Alert and Coordination System (EC, UN OCHA, UNOSAT)", "https://www.gdacs.org/"),
+    ("nasa-eonet", "NASA EONET — Earth Observatory Natural Event Tracker", "https://eonet.gsfc.nasa.gov/"),
+    ("nasa-firms", "NASA FIRMS — Fire Information for Resource Management System", "https://firms.modaps.eosdis.nasa.gov/"),
+    ("noaa-swpc", "Space Weather Prediction Center, NOAA", "https://www.spaceweather.gov/"),
+    ("smn-cdmx", "Servicio Meteorológico Nacional (SMN) / CONAGUA", "https://smn.conagua.gob.mx/"),
 ]
 
 
@@ -81,7 +87,7 @@ def show_time(iso: str) -> str:
 
 
 # Sources that give a date, not a moment: shown as that date, never shifted to CDMX time.
-DATE_ONLY_SOURCES = {"cisa-kev", "first-epss", "my-stack"}  # my-stack: dated by its evidence
+DATE_ONLY_SOURCES = {"cisa-kev", "first-epss", "my-stack", "smn-cdmx"}  # my-stack: dated by its evidence
 
 
 def show_event(row) -> str:
@@ -109,6 +115,12 @@ def gather(store: Store, collectors: list[Collector], now: datetime) -> Recon:
         sections.append(Section("my-stack", "Your stack — alerts, 7 days", "Tu stack — alertas, 7 días", [
             Group("Matched your watchlist (data/watchlist.txt)", "Coinciden con tu lista (data/watchlist.txt)",
                   list(_since(store, "my-stack", now, ALERT_WINDOW, ALERT_LIMIT))),
+        ]))
+    if "near-cdmx" in active:  # then quakes Trevor may have felt
+        sections.append(Section("near-cdmx", "Near CDMX — quake alerts, 7 days", "Cerca de CDMX — alertas de sismo, 7 días", [
+            Group("USGS and SSN reports, by World Watch's distance rule (not an official warning)",
+                  "Reportes de USGS y SSN, con la regla de distancia de World Watch (no es una alerta oficial)",
+                  list(_since(store, "near-cdmx", now, ALERT_WINDOW, ALERT_LIMIT))),
         ]))
     if "usgs-quakes" in active:
         quakes = store.items_between("usgs-quakes", iso_utc(now - QUAKE_WINDOW), iso_utc(now + timedelta(minutes=5)))

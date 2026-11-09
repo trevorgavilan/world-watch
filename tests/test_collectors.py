@@ -39,8 +39,10 @@ class Usgs(unittest.TestCase):
     def test_filter_rules(self):
         self.assertTrue(usgs.keep(4.5, 0, 0.0, 0.0))
         self.assertFalse(usgs.keep(4.4, 0, 0.0, 0.0))
-        self.assertTrue(usgs.keep(3.5, 0, 19.4, -99.1))  # CDMX
-        self.assertFalse(usgs.keep(3.4, 0, 19.4, -99.1))
+        self.assertTrue(usgs.keep(3.5, 0, 17.0, -100.0))  # Guerrero, in the Mexico box
+        self.assertFalse(usgs.keep(3.4, 0, 17.0, -100.0))
+        self.assertTrue(usgs.keep(2.5, 0, 19.4, -99.1))  # under CDMX: near-cdmx's rule (D-22)
+        self.assertFalse(usgs.keep(2.4, 0, 19.4, -99.1))
         self.assertTrue(usgs.keep(2.6, 650, 0.0, 0.0))
         self.assertFalse(usgs.keep(None, 0, 19.4, -99.1))
 

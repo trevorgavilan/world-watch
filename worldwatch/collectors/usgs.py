@@ -9,8 +9,8 @@ queries — M4.5+ worldwide and M3.5+ in the Mexico box — each far under the q
 cap (M3.5+ worldwide was 17,585 for the year to Oct 2026: too close). Catch-up misses only the rare
 sig >= 600 quake under M4.5 outside Mexico. USGS asks automated readers to prefer the feeds, so
 the query is used only for that catch-up.
-Kept: M4.5+ anywhere, anything USGS rates significant (sig >= 600), and M3.5+
-in a box around Mexico.
+Kept: M4.5+ anywhere, anything USGS rates significant (sig >= 600), M3.5+
+in a box around Mexico, and anything cdmx.py counts as near Mexico City (M2.5+ within 150 km).
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from urllib.parse import urlencode
 
 from ..item import make_item
 from ..views import Layer
-from . import Collector, ParseError
+from . import Collector, ParseError, cdmx
 
 SOURCE = "usgs-quakes"
 LICENCE = "US public domain (credit: U.S. Geological Survey)"
@@ -57,7 +57,7 @@ def keep(mag: float | None, sig: object, lat: float, lon: float) -> bool:
         return True
     if mag is None:
         return False
-    if mag >= GLOBAL_MIN_MAG:
+    if mag >= GLOBAL_MIN_MAG or cdmx.near_cdmx(mag, lat, lon):  # a small quake under the city counts
         return True
     return mag >= MEXICO_MIN_MAG and near_mexico(lat, lon)
 

@@ -338,7 +338,7 @@ class Wiring(StoreCase):
                     return fixture("osv_BIT-php-2026-109618.json")
                 return answers[host]
 
-        collectors = [c for c in all_collectors(self.dir) if c.source != "usgs-quakes"]
+        collectors = [c for c in all_collectors(self.dir) if c.channel != "hazards"]  # the quakes and Task 4: own tests
         results = run_once(self.store, collectors, Fake(), REPLAY_NOW)
         self.assertTrue(all(r.ok for r in results), results)
         # Fixed questions only: no URL depends on the watchlist, and my-stack fetched nothing.

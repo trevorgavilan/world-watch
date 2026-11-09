@@ -132,9 +132,10 @@ class Binding(BoardCase):
         from worldwatch.board.data import Registry
         from worldwatch.collectors import all_collectors
         registry = Registry(all_collectors())
-        self.assertEqual(set(registry.layers), {"quakes"})
+        self.assertEqual(set(registry.layers), {"quakes", "ssn-quakes", "gdacs", "eonet", "fires"})
         self.assertEqual(set(registry.panels), {"kev", "nvd", "osv", "epss", "my-stack", "github-status", "cloudflare-status",
-                                                "claude-status", "google-workspace-status"})
+                                                "claude-status", "google-workspace-status", "near-cdmx",
+                                                "space-weather", "cdmx-weather"})
 
 
 class HostHeader(BoardCase):

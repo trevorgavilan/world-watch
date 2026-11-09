@@ -1,0 +1,113 @@
+<?xml version="1.0"?>
+	<rss version="2.0" xmlns:geo="http://www.w3.org/2003/01/geo/wgs84_pos#">
+	<channel>
+	<title>Últimos sismos registrados por el SSN</title>
+		<link>http://www.ssn.unam.mx</link>
+		<description>Reporte de los últimos sismos en México</description>
+		<item>
+			<title>4.1, 109 km al SUROESTE de  HUIXTLA, CHIS</title>
+			<description><![CDATA[ <p>Fecha:2026-11-09 12:47:36 (Hora de M&eacute;xico)<br/>Lat/Lon: 14.406/-93.15<br/>Profundidad: 10.0 km </p> ]]></description>
+			<link><![CDATA[ http://www2.ssn.unam.mx:8080/jsp/localizacion-de-sismo.jsp?latitud=14.406&longitud=-93.15&prf=10.0 km&ma=4.1&fecha=2026-11-09&hora=12:47:36&loc=109 km al SUROESTE de  HUIXTLA, CHIS&evento=1 ]]></link>
+			<geo:lat>14.406</geo:lat>
+			<geo:long>-93.15</geo:long>
+		</item>
+		<item>
+			<title>3.2, 29 km al ESTE de  SAN MARCOS, GRO</title>
+			<description><![CDATA[ <p>Fecha:2026-11-09 04:54:26 (Hora de M&eacute;xico)<br/>Lat/Lon: 16.747/-99.122<br/>Profundidad: 31.8 km </p> ]]></description>
+			<link><![CDATA[ http://www2.ssn.unam.mx:8080/jsp/localizacion-de-sismo.jsp?latitud=16.747&longitud=-99.122&prf=31.8 km&ma=3.2&fecha=2026-11-09&hora=04:54:26&loc=29 km al ESTE de  SAN MARCOS, GRO&evento=1 ]]></link>
+			<geo:lat>16.747</geo:lat>
+			<geo:long>-99.122</geo:long>
+		</item>
+		<item>
+			<title>3.4, 84 km al SUROESTE de  PIJIJIAPAN, CHIS</title>
+			<description><![CDATA[ <p>Fecha:2026-11-09 04:51:12 (Hora de M&eacute;xico)<br/>Lat/Lon: 15.132/-93.739<br/>Profundidad: 11.1 km </p> ]]></description>
+			<link><![CDATA[ http://www2.ssn.unam.mx:8080/jsp/localizacion-de-sismo.jsp?latitud=15.132&longitud=-93.739&prf=11.1 km&ma=3.4&fecha=2026-11-09&hora=04:51:12&loc=84 km al SUROESTE de  PIJIJIAPAN, CHIS&evento=1 ]]></link>
+			<geo:lat>15.132</geo:lat>
+			<geo:long>-93.739</geo:long>
+		</item>
+		<item>
+			<title>3.4, 14 km al SUROESTE de  SALINA CRUZ, OAX</title>
+			<description><![CDATA[ <p>Fecha:2026-11-09 04:31:03 (Hora de M&eacute;xico)<br/>Lat/Lon: 16.068/-95.247<br/>Profundidad: 28.6 km </p> ]]></description>
+			<link><![CDATA[ http://www2.ssn.unam.mx:8080/jsp/localizacion-de-sismo.jsp?latitud=16.068&longitud=-95.247&prf=28.6 km&ma=3.4&fecha=2026-11-09&hora=04:31:03&loc=14 km al SUROESTE de  SALINA CRUZ, OAX&evento=1 ]]></link>
+			<geo:lat>16.068</geo:lat>
+			<geo:long>-95.247</geo:long>
+		</item>
+		<item>
+			<title>3.6, 25 km al SUROESTE de  CINTALAPA, CHIS</title>
+			<description><![CDATA[ <p>Fecha:2026-11-09 04:11:01 (Hora de M&eacute;xico)<br/>Lat/Lon: 16.519/-93.865<br/>Profundidad: 135.9 km </p> ]]></description>
+			<link><![CDATA[ http://www2.ssn.unam.mx:8080/jsp/localizacion-de-sismo.jsp?latitud=16.519&longitud=-93.865&prf=135.9 km&ma=3.6&fecha=2026-11-09&hora=04:11:01&loc=25 km al SUROESTE de  CINTALAPA, CHIS&evento=1 ]]></link>
+			<geo:lat>16.519</geo:lat>
+			<geo:long>-93.865</geo:long>
+		</item>
+		<item>
+			<title>3.3, 46 km al OESTE de  MATIAS ROMERO, OAX</title>
+			<description><![CDATA[ <p>Fecha:2026-11-09 04:03:02 (Hora de M&eacute;xico)<br/>Lat/Lon: 16.977/-95.456<br/>Profundidad: 95.8 km </p> ]]></description>
+			<link><![CDATA[ http://www2.ssn.unam.mx:8080/jsp/localizacion-de-sismo.jsp?latitud=16.977&longitud=-95.456&prf=95.8 km&ma=3.3&fecha=2026-11-09&hora=04:03:02&loc=46 km al OESTE de  MATIAS ROMERO, OAX&evento=1 ]]></link>
+			<geo:lat>16.977</geo:lat>
+			<geo:long>-95.456</geo:long>
+		</item>
+		<item>
+			<title>2.6, 33 km al SUR de  TECPAN, GRO</title>
+			<description><![CDATA[ <p>Fecha:2026-11-09 03:58:53 (Hora de M&eacute;xico)<br/>Lat/Lon: 16.927/-100.572<br/>Profundidad: 12.3 km </p> ]]></description>
+			<link><![CDATA[ http://www2.ssn.unam.mx:8080/jsp/localizacion-de-sismo.jsp?latitud=16.927&longitud=-100.572&prf=12.3 km&ma=2.6&fecha=2026-11-09&hora=03:58:53&loc=33 km al SUR de  TECPAN, GRO&evento=1 ]]></link>
+			<geo:lat>16.927</geo:lat>
+			<geo:long>-100.572</geo:long>
+		</item>
+		<item>
+			<title>3.8, 26 km al SUROESTE de  ALVARADO, VER</title>
+			<description><![CDATA[ <p>Fecha:2026-11-09 03:18:29 (Hora de M&eacute;xico)<br/>Lat/Lon: 18.612/-95.949<br/>Profundidad: 10.0 km </p> ]]></description>
+			<link><![CDATA[ http://www2.ssn.unam.mx:8080/jsp/localizacion-de-sismo.jsp?latitud=18.612&longitud=-95.949&prf=10.0 km&ma=3.8&fecha=2026-11-09&hora=03:18:29&loc=26 km al SUROESTE de  ALVARADO, VER&evento=1 ]]></link>
+			<geo:lat>18.612</geo:lat>
+			<geo:long>-95.949</geo:long>
+		</item>
+		<item>
+			<title>1.4, 8 km al SUROESTE de  SAN JOSE DEL CABO, BCS</title>
+			<description><![CDATA[ <p>Fecha:2026-11-09 03:06:19 (Hora de M&eacute;xico)<br/>Lat/Lon: 23.004/-109.75<br/>Profundidad: 10.5 km </p> ]]></description>
+			<link><![CDATA[ http://www2.ssn.unam.mx:8080/jsp/localizacion-de-sismo.jsp?latitud=23.004&longitud=-109.75&prf=10.5 km&ma=1.4&fecha=2026-11-09&hora=03:06:19&loc=8 km al SUROESTE de  SAN JOSE DEL CABO, BCS&evento=1 ]]></link>
+			<geo:lat>23.004</geo:lat>
+			<geo:long>-109.75</geo:long>
+		</item>
+		<item>
+			<title>3.7, 104 km al SURESTE de  SALINA CRUZ, OAX</title>
+			<description><![CDATA[ <p>Fecha:2026-11-09 03:02:50 (Hora de M&eacute;xico)<br/>Lat/Lon: 15.394/-94.671<br/>Profundidad: 20.0 km </p> ]]></description>
+			<link><![CDATA[ http://www2.ssn.unam.mx:8080/jsp/localizacion-de-sismo.jsp?latitud=15.394&longitud=-94.671&prf=20.0 km&ma=3.7&fecha=2026-11-09&hora=03:02:50&loc=104 km al SURESTE de  SALINA CRUZ, OAX&evento=1 ]]></link>
+			<geo:lat>15.394</geo:lat>
+			<geo:long>-94.671</geo:long>
+		</item>
+		<item>
+			<title>2.4, 27 km al NORESTE de  COYUCA DE BENITEZ, GRO</title>
+			<description><![CDATA[ <p>Fecha:2026-11-09 03:02:28 (Hora de M&eacute;xico)<br/>Lat/Lon: 17.236/-100.009<br/>Profundidad: 12.3 km </p> ]]></description>
+			<link><![CDATA[ http://www2.ssn.unam.mx:8080/jsp/localizacion-de-sismo.jsp?latitud=17.236&longitud=-100.009&prf=12.3 km&ma=2.4&fecha=2026-11-09&hora=03:02:28&loc=27 km al NORESTE de  COYUCA DE BENITEZ, GRO&evento=1 ]]></link>
+			<geo:lat>17.236</geo:lat>
+			<geo:long>-100.009</geo:long>
+		</item>
+		<item>
+			<title>3.4, 52 km al SUROESTE de  COALCOMAN, MICH</title>
+			<description><![CDATA[ <p>Fecha:2026-11-09 02:59:15 (Hora de M&eacute;xico)<br/>Lat/Lon: 18.439/-103.504<br/>Profundidad: 10.0 km </p> ]]></description>
+			<link><![CDATA[ http://www2.ssn.unam.mx:8080/jsp/localizacion-de-sismo.jsp?latitud=18.439&longitud=-103.504&prf=10.0 km&ma=3.4&fecha=2026-11-09&hora=02:59:15&loc=52 km al SUROESTE de  COALCOMAN, MICH&evento=1 ]]></link>
+			<geo:lat>18.439</geo:lat>
+			<geo:long>-103.504</geo:long>
+		</item>
+		<item>
+			<title>3.3, 22 km al SUR de  GPE VICTORIA(KM.43), BC</title>
+			<description><![CDATA[ <p>Fecha:2026-11-09 02:39:04 (Hora de M&eacute;xico)<br/>Lat/Lon: 32.093/-115.13<br/>Profundidad: 10.8 km </p> ]]></description>
+			<link><![CDATA[ http://www2.ssn.unam.mx:8080/jsp/localizacion-de-sismo.jsp?latitud=32.093&longitud=-115.13&prf=10.8 km&ma=3.3&fecha=2026-11-09&hora=02:39:04&loc=22 km al SUR de  GPE VICTORIA(KM.43), BC&evento=1 ]]></link>
+			<geo:lat>32.093</geo:lat>
+			<geo:long>-115.13</geo:long>
+		</item>
+		<item>
+			<title>3.7, 75 km al NOROESTE de  CIHUATLAN, JAL</title>
+			<description><![CDATA[ <p>Fecha:2026-11-09 02:29:58 (Hora de M&eacute;xico)<br/>Lat/Lon: 19.431/-105.246<br/>Profundidad: 32.0 km </p> ]]></description>
+			<link><![CDATA[ http://www2.ssn.unam.mx:8080/jsp/localizacion-de-sismo.jsp?latitud=19.431&longitud=-105.246&prf=32.0 km&ma=3.7&fecha=2026-11-09&hora=02:29:58&loc=75 km al NOROESTE de  CIHUATLAN, JAL&evento=1 ]]></link>
+			<geo:lat>19.431</geo:lat>
+			<geo:long>-105.246</geo:long>
+		</item>
+		<item>
+			<title>3.7, 43 km al NORESTE de  MATIAS ROMERO, OAX</title>
+			<description><![CDATA[ <p>Fecha:2026-11-09 02:28:56 (Hora de M&eacute;xico)<br/>Lat/Lon: 17.055/-94.682<br/>Profundidad: 129.2 km </p> ]]></description>
+			<link><![CDATA[ http://www2.ssn.unam.mx:8080/jsp/localizacion-de-sismo.jsp?latitud=17.055&longitud=-94.682&prf=129.2 km&ma=3.7&fecha=2026-11-09&hora=02:28:56&loc=43 km al NORESTE de  MATIAS ROMERO, OAX&evento=1 ]]></link>
+			<geo:lat>17.055</geo:lat>
+			<geo:long>-94.682</geo:long>
+		</item>
+	</channel>
+	</rss>
