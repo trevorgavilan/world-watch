@@ -54,6 +54,17 @@ class Ssn(unittest.TestCase):
         with self.assertRaises(ParseError):
             ssn.COLLECTOR.parse(bomb, NOW)
 
+    def test_another_encoding_cannot_hide_an_entity(self):
+        # UTF-16 without a BOM reads as valid UTF-8 full of NULs: the "<!ENTITY" check would never see it.
+        doc = ('<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE rss [<!ENTITY x "4.1">]><rss><channel><item>'
+               '<title>&x;, 1 km al N de X, CDMX</title><description>Fecha:2026-11-09 12:00:00</description>'
+               '<geo:lat xmlns:geo="http://www.w3.org/2003/01/geo/wgs84_pos#">19.4</geo:lat>'
+               '<geo:long xmlns:geo="http://www.w3.org/2003/01/geo/wgs84_pos#">-99.1</geo:long></item></channel></rss>')
+        for payload in (doc.encode("utf-16-le"), doc.encode("utf-16"),
+                        doc.replace("UTF-16", "ISO-8859-1").replace("<!DOCTYPE", "<!doctype").encode("utf-8")):
+            with self.assertRaises(ParseError):
+                ssn.COLLECTOR.parse(payload, NOW)
+
     def test_not_rss_is_a_parse_error(self):
         for payload in (b"<html><body>mantenimiento</body></html>", b"not xml at all"):
             with self.assertRaises(ParseError):
@@ -148,6 +159,11 @@ class Firms(unittest.TestCase):
         ids = {i.id for i in self.items}
         self.assertFalse(any(firms._build(r, NOW).id in ids for r in low))
 
+    def test_one_oversized_field_is_a_parse_error_not_a_crash(self):
+        header = gz("firms_j1_central_america_24h_2026-11-09.csv.gz").split(b"\n", 1)[0]
+        with self.assertRaises(ParseError):
+            firms.COLLECTOR.parse(header + b"\n19.4,-99.1," + b"9" * 200_000 + b"\n", NOW)
+
     def test_bigger_fires_weigh_more(self):
         self.assertLess(firms.weight({"severity": "FRP 1 MW"}), firms.weight({"severity": "FRP 80 MW"}))
         self.assertEqual(firms.weight({"severity": "FRP 900 MW"}), 1.0)
@@ -208,7 +224,7 @@ class Smn(unittest.TestCase):
 
     def test_a_gzip_bomb_stops_at_the_cap(self):
         bomb = gzip.compress(b"[" + b" " * (smn.MAX_UNPACKED + 10) + b"]")
-        with self.assertRaises(ParseError):
+        with self.assertRaisesRegex(ParseError, "unpacks to more than"):  # the cap, not a parse failure after it
             smn.COLLECTOR.parse(bomb, NOW)
 
     def test_not_gzip_is_a_parse_error(self):

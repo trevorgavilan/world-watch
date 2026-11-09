@@ -1,6 +1,6 @@
 """Planted bugs: each mutant breaks one rule that matters; the suite must catch every one.
 
-    python tools/mutants.py           every planted bug (~15 min)
+    python tools/mutants.py           every planted bug (~2 h)
     python tools/mutants.py layout strip    only those whose name has one of the words (while working)
 
 Copies the code to a temp folder per mutant, applies one edit, runs the tests,
@@ -218,6 +218,41 @@ MUTANTS = [
      'box.innerHTML = s ? sourceLine(s) + " · " + sourceDetail(s) : "";'),
     ("board: the CSP lets inline styles in", "worldwatch/board/server.py",
      "style-src 'self'; img-src", "style-src 'self' 'unsafe-inline'; img-src"),
+    # Task 4 — hazards and Mexico (D-22): the time, the id, the box, the caps, one alert per quake.
+    ("ssn: Mexico time read as UTC", "worldwatch/collectors/ssn.py",
+     'MEXICO_TIME = timezone(timedelta(hours=-6), "CDMX")', "MEXICO_TIME = timezone.utc"),
+    ("ssn: an XML bomb's DTD is parsed", "worldwatch/collectors/ssn.py",
+     'if "<!DOCTYPE" in upper or "<!ENTITY" in upper:', "if False:"),
+    ("ssn: another encoding hides the bomb from the check", "worldwatch/collectors/ssn.py",
+     'raise ParseError(f"{source}: only UTF-8 XML is read")', "pass"),
+    ("ssn: the feed's raw spaces kill the link", "worldwatch/collectors/ssn.py",
+     'url=quote(link, safe=":/?&=%#") if link else None', "url=link or None"),
+    ("ssn: a revised magnitude is a new quake", "worldwatch/collectors/ssn.py",
+     'native_id=happened.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),', "native_id=title,"),
+    ("firms: the whole region kept, not the Mexico box", "worldwatch/collectors/firms.py",
+     'if not usgs.near_mexico(float(row["latitude"]), float(row["longitude"])):', "if False:"),
+    ("firms: one oversized field crashes the batch", "worldwatch/collectors/firms.py",
+     "except csv.Error as err:", "except ValueError as err:"),
+    ("smn: a gzip bomb unpacks without a cap", "worldwatch/collectors/smn.py",
+     "if len(text) > MAX_UNPACKED:", "if False:"),
+    ("near-cdmx: one quake from two sources is two alerts", "worldwatch/collectors/near_cdmx.py",
+     "limit_s, limit_km = (SAME_SECONDS, SAME_KM) if a.source == b.source else (QUAKE_SECONDS, QUAKE_KM)",
+     "limit_s, limit_km = (SAME_SECONDS, SAME_KM) if a.source == b.source else (-1, QUAKE_KM)"),
+    ("near-cdmx: a re-timed report from one source is a second quake", "worldwatch/collectors/near_cdmx.py",
+     "limit_s, limit_km = (SAME_SECONDS, SAME_KM) if a.source == b.source else (QUAKE_SECONDS, QUAKE_KM)",
+     "limit_s, limit_km = (-1, SAME_KM) if a.source == b.source else (QUAKE_SECONDS, QUAKE_KM)"),
+    ("near-cdmx: the alert's id follows the source order, not the first stored", "worldwatch/collectors/near_cdmx.py",
+     'order = sorted(reports, key=lambda r: (r.row["fetched_at"], QUAKE_SOURCES.index(r.source), r.row["id"]))',
+     'order = sorted(reports, key=lambda r: (QUAKE_SOURCES.index(r.source), r.row["id"]))'),
+    ("near-cdmx: grouped after the rule, so a revised magnitude moves the alert", "worldwatch/collectors/near_cdmx.py",
+     'if cdmx.km_from_cdmx(row["lat"], row["lon"]) <= REACH_KM:',
+     'if cdmx.near_cdmx(usgs.magnitude(row), row["lat"], row["lon"]):'),
+    ("near-cdmx: an alert revised below the rule stays", "worldwatch/collectors/near_cdmx.py",
+     "store.forget_items(SOURCE, [", "(lambda *a: None)(SOURCE, ["),
+    ("near-cdmx: in a burst a report joins the first quake, not the closest", "worldwatch/collectors/near_cdmx.py",
+     "if gaps and (best_gap is None or min(gaps) < best_gap):", "if gaps and best_gap is None:"),
+    ("near-cdmx: a big far quake never alerts", "worldwatch/collectors/cdmx.py",
+     "NEAR_RULES = ((150.0, 2.5), (400.0, 5.0), (700.0, 6.0), (1200.0, 7.0))", "NEAR_RULES = ((150.0, 2.5),)"),
 ]
 
 

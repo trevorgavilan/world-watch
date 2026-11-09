@@ -31,7 +31,14 @@ collecting in that window until you close it. Switch the PC on and off whenever 
 
 | Source | What | Every | Licence |
 |---|---|---|---|
-| `usgs-quakes` | USGS M2.5+ past-week GeoJSON (catalogue query after a longer gap); keeps M4.5+ anywhere, sig ≥ 600, M3.5+ around Mexico | 15 min | US public domain |
+| `usgs-quakes` | USGS M2.5+ past-week GeoJSON (catalogue query after a longer gap); keeps M4.5+ anywhere, sig ≥ 600, M3.5+ around Mexico, M2.5+ within 150 km of CDMX | 15 min | US public domain |
+| `ssn-quakes` | Servicio Sismológico Nacional (UNAM) RSS: the last 15 quakes it located, Mexico City time | 5 min | free use, credit SSN / UNAM |
+| `near-cdmx` | **nothing fetched:** one alert per quake near CDMX from USGS and SSN (M2.5+ ≤ 150 km, M5+ ≤ 400, M6+ ≤ 700, M7+ ≤ 1,200; D-22) | 5 min | — |
+| `gdacs` | GDACS current events (`events4app`): quakes, cyclones, floods, fires, with Green / Orange / Red alert levels | 30 min | GDACS terms: as is, never instead of national alerts |
+| `nasa-eonet` | NASA EONET v3: open natural events with a position in the last 30 days | 1 h | NASA; general information only |
+| `nasa-firms` | NASA FIRMS VIIRS NOAA-20 24 h Central America CSV (no key), Mexico box, nominal / high confidence | 1 h | NASA open data; credit NASA FIRMS |
+| `noaa-swpc` | NOAA SWPC alerts, watches and warnings (a panel: no place on the globe) | 30 min | US public domain; credit SWPC |
+| `smn-cdmx` | SMN / CONAGUA municipal forecast web service (one national gzip): today's forecast for CDMX's 16 alcaldías | 3 h | public domain; credit SMN |
 | `cisa-kev` | CISA Known Exploited Vulnerabilities, whole catalogue | 6 h | CC0 1.0 |
 | `nvd-cves` | NVD CVE API 2.0: CVEs *published* since the last run (3 h overlap; 7 days on a first run, 30 at most), every page | 2 h | US public domain; "This product uses data from the NVD API but is not endorsed or certified by the NVD." |
 | `osv-bitnami` | OSV.dev bulk files, Bitnami ecosystem: `modified_id.csv`, then each record changed since the last run (≤ 200) | 6 h | Apache 2.0 (Bitnami via OSV) |

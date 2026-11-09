@@ -31,13 +31,22 @@ GEO = "{http://www.w3.org/2003/01/geo/wgs84_pos#}"
 WHEN = re.compile(r"Fecha:\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 DEPTH = re.compile(r"Profundidad:\s*([\d.]+)\s*km")
 TITLE = re.compile(r"^\s*([\d.]+)\s*,\s*(.+)$")
+DECLARED = re.compile(r"""^﻿?\s*<\?xml[^>]*\bencoding\s*=\s*["']([^"']+)["']""")
 
 
 def decode_rss(payload: bytes, source: str) -> ET.Element:
-    """An RSS document, or ParseError. A DTD or entity declaration is refused before parsing:
-    the feed never needs one, and it is how XML bombs work."""
-    head = payload[:4096].upper()
-    if b"<!DOCTYPE" in head or b"<!ENTITY" in payload.upper():
+    """An RSS document, or ParseError. Only UTF-8 is read, and a DTD or entity declaration is refused
+    before parsing: the feed never needs one, and it is how XML bombs work (the feed is plain http,
+    so anyone on the path could send one). Another encoding could hide the declaration from the check."""
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as err:
+        raise ParseError(f"{source}: not UTF-8") from err
+    declared = DECLARED.match(text)
+    if "\x00" in text or (declared and declared.group(1).lower().replace("_", "-") != "utf-8"):
+        raise ParseError(f"{source}: only UTF-8 XML is read")
+    upper = text.upper()
+    if "<!DOCTYPE" in upper or "<!ENTITY" in upper:
         raise ParseError(f"{source}: XML with a DTD or entities refused")
     try:
         root = ET.fromstring(payload)

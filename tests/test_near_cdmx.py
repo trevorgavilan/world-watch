@@ -144,6 +144,48 @@ class OnePoll(unittest.TestCase):
         self.poll(NOW, ssn_payload=ssn_feed(mag="3.2", lat="16.747", lon="-99.122", place="29 km al ESTE de  SAN MARCOS, GRO"))
         self.assertEqual(self.city_alerts(), [])
 
+    def test_a_revised_magnitude_never_moves_or_doubles_the_alert(self):
+        # USGS stores an Acapulco quake (~300 km) at M4.8 — under the rule there — before SSN says M5.0.
+        acapulco = datetime(2026, 11, 9, 18, 52, 12, tzinfo=timezone.utc)
+        ssn_says = ssn_feed(mag="5.0", place="10 km al SUR de  ACAPULCO, GRO", lat="16.85", lon="-99.88")
+
+        def at(mag, now, with_ssn):
+            self.poll(now, ssn_payload=ssn_says if with_ssn else None,
+                      usgs_payload=usgs_feed(("us7000aca", mag, 16.86, -99.87, acapulco)))
+            return [a for a in self.alerts(now) if "ACAPULCO" in a["title"] or "Mexico City" in a["title"]]
+
+        self.assertEqual(at(4.8, NOW, False), [])                       # USGS alone: under the rule
+        later = NOW + timedelta(minutes=15)
+        first = at(4.8, later, True)                                   # SSN's M5.0 raises it
+        self.assertEqual(len(first), 1)
+        again = at(5.0, later + timedelta(minutes=15), True)           # USGS revises up: same alert
+        self.assertEqual([a["id"] for a in again], [first[0]["id"]])
+
+    def test_an_alert_revised_below_the_rule_leaves(self):
+        self.poll(NOW, ssn_payload=ssn_feed(mag="5.0", place="10 km al SUR de  ACAPULCO, GRO", lat="16.85", lon="-99.88"))
+        self.assertEqual(len(self.alerts()), 1)
+        later = NOW + timedelta(minutes=15)
+        self.poll(later, ssn_payload=ssn_feed(mag="4.8", place="10 km al SUR de  ACAPULCO, GRO", lat="16.85", lon="-99.88"))
+        self.assertEqual(self.alerts(later), [])
+
+    def test_a_re_timed_ssn_report_is_still_one_alert(self):
+        self.poll(NOW, ssn_payload=ssn_feed())
+        later = NOW + timedelta(minutes=5)
+        self.poll(later, ssn_payload=ssn_feed(local="2026-11-09 12:52:11"))  # SSN moves it by a second
+        self.assertEqual(len(self.city_alerts(later)), 1)
+
+    def test_in_a_burst_usgs_pairs_with_the_closest_ssn_report(self):
+        # SSN: t0 and t0+90 s, both under the city; USGS: t0+2 s. Two alerts, USGS's beside t0.
+        data = ssn_feed()
+        second = ssn_feed(mag="3.0", local="2026-11-09 12:53:40", lat="19.30", lon="-99.18")
+        item = second[second.index(b"<item>"):second.index(b"</item>") + len(b"</item>")]
+        data = data.replace(b"<item>", item + b"<item>", 1)
+        self.poll(NOW, ssn_payload=data, usgs_payload=usgs_feed(("us7000cdmx", 3.1, 19.34, -99.20, QUAKE_UTC)))
+        alerts = sorted((a for a in self.alerts() if "km from CDMX" in a["title"]), key=lambda a: a["happened_at"])
+        self.assertEqual(len(alerts), 2)
+        self.assertIn("usgs-quakes", alerts[0]["summary"])
+        self.assertNotIn("usgs-quakes", alerts[1]["summary"])
+
     def test_recon_leads_with_the_alert(self):
         self.poll(NOW, ssn_payload=ssn_feed())
         page = recon.gather(self.store, self.collectors, NOW)

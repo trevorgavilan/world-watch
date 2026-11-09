@@ -38,10 +38,13 @@ def decode_csv(payload: bytes, source: str) -> list[dict]:
     if not reader.fieldnames or not COLUMNS <= set(reader.fieldnames):
         raise ParseError(f"{source}: not the FIRMS CSV ({(text[:80])!r})")
     rows = []
-    for row in reader:
-        rows.append(row)
-        if len(rows) > MAX_ROWS:
-            raise ParseError(f"{source}: more than {MAX_ROWS} rows")
+    try:
+        for row in reader:
+            rows.append(row)
+            if len(rows) > MAX_ROWS:
+                raise ParseError(f"{source}: more than {MAX_ROWS} rows")
+    except csv.Error as err:  # a field over the csv module's limit, a stray NUL…
+        raise ParseError(f"{source}: unreadable CSV ({err})") from err
     return rows
 
 
