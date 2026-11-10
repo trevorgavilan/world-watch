@@ -121,8 +121,10 @@ window.WWViewer = (() => {
       if (e.key === "ArrowLeft") step(-1);
       else if (e.key === "ArrowRight") step(1);
     });
-    return { update, show, step, state: v };
+    const api = { update, show, step, state: v };
+    window.WWViewer.current = api;  // for the browser tests, as WWMap.current
+    return api;
   }
 
-  return { create };
+  return { create, current: null };
 })();

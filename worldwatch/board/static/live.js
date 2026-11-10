@@ -181,5 +181,5 @@
   v.picks = storedPicks();
   load(true);
   setInterval(() => load(false), REFRESH_MS);
-  window.WWLive = { state: v };
+  window.WWLive = { state: v, refresh: () => load(false) };  // refresh: for the browser tests
 })();
