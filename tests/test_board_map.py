@@ -213,10 +213,11 @@ class FlatMap(unittest.TestCase):
     def test_clicking_a_pin_selects_its_point(self):
         pin = self.marks(kind="pin", id=self.qid["q-big"])[0]
         self.click(pin)
-        body = self.b.run("document.querySelector('#picked-body').textContent")
         self.assertFalse(self.b.run("document.querySelector('#picked').hidden"))
+        self.b.wait_for("document.querySelector('#picked-body').textContent.includes('Basis:')", timeout=5)
+        body = self.b.run("document.querySelector('#picked-body').textContent")
         self.assertIn("quake q-big", body)
-        self.assertIn("usgs-quakes", body)
+        self.assertIn("U.S. Geological Survey", body)  # the pop-up card (test_board_popup) names the source
 
     def test_hover_shows_source_text_as_text(self):
         mark = next(m for m in self.marks(layer="quakes", id=self.qid["q-hostile"]) if m["kind"] == "circle")

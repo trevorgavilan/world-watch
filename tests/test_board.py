@@ -296,7 +296,7 @@ class TextNotHtml(unittest.TestCase):
         self.assertIn(HOSTILE, titles)
 
     def test_page_script_never_writes_html(self):
-        for name in ("board.js", "map.js", "pins.js", "player.js", "viewer.js", "live.js"):
+        for name in ("board.js", "map.js", "pins.js", "player.js", "viewer.js", "live.js", "popup.js"):
             self.assertNotRegex((STATIC / name).read_text(encoding="utf-8"),
                                 r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function|"
                                 r"setAttribute\(\s*['\"](on|style|href)", name)
@@ -324,7 +324,7 @@ class TextNotHtml(unittest.TestCase):
         js = (STATIC / "board.js").read_text(encoding="utf-8")
         self.assertEqual(len(re.findall(r"\.href\s*=", js)), 1, "one place sets a link")
         self.assertIsNotNone(re.search(r"\.href\s*=\s*safe", js))
-        for name in ("map.js", "pins.js"):  # the map hands a picked point to board.js; it never makes a link
+        for name in ("map.js", "pins.js", "popup.js"):  # they hand points to board.js; only its link() makes a link
             self.assertIsNone(re.search(r"\.href\s*=|\.src\s*=(?!\s*[\"']/static/)", (STATIC / name).read_text(encoding="utf-8")), name)
         for name in ("viewer.js", "live.js"):  # a stream's link only through the player's own check
             js = (STATIC / name).read_text(encoding="utf-8")

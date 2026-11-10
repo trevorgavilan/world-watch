@@ -1,7 +1,8 @@
 /* World Watch Board — the flat world map: the vendored blue-marble image (equirectangular, D-17: no
    tiles from the internet), darkened, on one canvas, with each layer's points drawn by WWPins.
    Wheel or the +/- buttons zoom, dragging pans, a click on a pin selects it, a click on a fire cluster
-   zooms into it. The hover tip is set with textContent only. */
+   zooms into it, a click on nothing lets go. The hover tip is set with textContent only. A followed point
+   (the picked pin) is reported after every frame, so its pop-up card moves with it. */
 "use strict";
 
 window.WWMap = (() => {
@@ -41,6 +42,7 @@ window.WWMap = (() => {
     let drag = null;
     let fitted = false;
     let pointer = null;   // where the mouse rests, so the tip follows a zoom or a refresh
+    let followed = null;  // { lat, lon, fn }: the picked pin, told where it is after each frame
 
     const toX = (lon) => v.ox + (lon + 180) * v.s;
     const toY = (lat) => v.oy + (90 - lat) * v.s;
@@ -222,6 +224,11 @@ window.WWMap = (() => {
           label: m.style.label });
       }
       if (pointer && !drag) showTip(hit(pointer.x, pointer.y), pointer.x, pointer.y);
+      if (followed) {
+        const x = toX(followed.lon);
+        const y = toY(followed.lat);
+        followed.fn(x, y, x >= 0 && y >= 0 && x <= v.w && y <= v.h);
+      }
     }
 
     function redraw() {
@@ -264,7 +271,10 @@ window.WWMap = (() => {
     }
 
     function click(m) {
-      if (!m) return;
+      if (!m) {
+        onPick(null);  // a click on nothing closes the card
+        return;
+      }
       if (m.kind === "cluster") {
         centre(lonAt(m.x), latAt(m.y), v.s * 4);
         return;
@@ -378,6 +388,10 @@ window.WWMap = (() => {
         redraw();
       },
       show,
+      follow(point, fn) {
+        followed = point && typeof fn === "function" && valid(point) ? { lat: point.lat, lon: point.lon, fn } : null;
+        if (followed) redraw();
+      },
       zoom(factor) {
         zoomAt(factor, v.w / 2, v.h / 2);
       },

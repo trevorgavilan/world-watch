@@ -3,6 +3,7 @@
    safe() re-checks it as http(s) (D-17). globe.gl renders point labels as HTML, so they stay off.
    The flat map (map.js, pins.js) is the main view; the globe is loaded only when asked for.
    The Middle East live streams play in the viewer (viewer.js, player.js), the one outside frame (D-24).
+   A picked pin opens a pop-up card (popup.js) with the item's full record from /api/items/<id>.
    The layout (the view, the map / list split, the bottom strip's height, folded lists) is remembered in this
    browser's localStorage. */
 "use strict";
@@ -33,7 +34,7 @@
 
   const state = {
     globe: null, map: null, view: "map", layers: [], shown: {}, openLayers: new Set(), points: {}, now: null,
-    side: null, folded: new Set(), sources: [], detail: null, viewer: null,
+    side: null, folded: new Set(), sources: [], detail: null, viewer: null, popup: null, picked: null,
   };
 
   function el(tag, text, cls) {
@@ -315,6 +316,7 @@
       else state.globe.pauseAnimation();
     }
     if (keep) remember(VIEW_KEY, state.view);
+    follow();
   }
 
   function makeGlobe() {
@@ -347,24 +349,43 @@
     return p;
   }
 
+  /* A click on a pin (map or globe) opens its card; a click on nothing closes it (Trevor, 10 Nov). */
   function pick(point) {
-    const body = $("picked-body");
-    body.replaceChildren();
     if (!point) {
-      $("picked").hidden = true;
+      if (state.popup) state.popup.close();
       return;
     }
-    const title = el("p", null, "title");
-    title.append(link(point.title, point.url));
-    body.append(
-      title,
-      line("Severity:", point.severity || "—"),
-      line("Happened:", when(point.happened_at, false)),
-      line("Fetched:", when(point.fetched_at, false) + " (" + ago(point.fetched_at) + ")"),
-      line("Source:", point.source),
-    );
-    $("picked").hidden = false;
     if (point.source === LIVE_SOURCE && state.viewer) state.viewer.show(point.id);
+    if (!state.popup) return;
+    state.picked = point;
+    state.popup.open(point);
+    follow();
+  }
+
+  /* On the map the card follows its pin through zooms and pans; on the globe it docks in a corner. */
+  function follow() {
+    if (!state.popup || !state.picked) return;
+    if (state.view === "map" && state.map) {
+      state.map.follow(state.picked, (x, y, seen) =>
+        state.popup.place(x + $("map").offsetLeft, y + $("map").offsetTop, seen));
+    } else {
+      if (state.map) state.map.follow(null);
+      state.popup.dock();
+    }
+  }
+
+  function makePopup() {
+    if (!window.WWPopup) return null;
+    const popup = window.WWPopup.create($("picked"), $("picked-body"), {
+      el, link, line, when, ago,
+      fetchDetail: (id) => getJson("/api/items/" + encodeURIComponent(id)),
+      onClose: () => {
+        state.picked = null;
+        if (state.map) state.map.follow(null);
+      },
+    });
+    $("picked-close").addEventListener("click", () => popup.close());
+    return popup;
   }
 
   function liveMeta(e) {
@@ -553,12 +574,16 @@
   makeFootDivider();
   foldable($("layers-box"), $("layers"), "layers");
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && state.detail) {
+    if (e.key !== "Escape") return;
+    if (state.detail) {
       state.detail = null;
       drawDetail();
+    } else if (state.popup) {
+      state.popup.close();
     }
   });
   state.map = makeMap();
+  state.popup = makePopup();
   state.viewer = makeViewer();
   $("view-map").addEventListener("click", () => setView("map", true));
   $("view-globe").addEventListener("click", () => setView("globe", true));

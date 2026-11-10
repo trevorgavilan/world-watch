@@ -10,6 +10,7 @@
 <script src="/static/player.js" defer></script>
 <script src="/static/viewer.js" defer></script>
 <script src="/static/map.js" defer></script>
+<script src="/static/popup.js" defer></script>
 <script src="/static/board.js" defer></script>
 </head>
 <body>
@@ -37,6 +38,10 @@
     </div>
     <div id="map" class="map"></div>
     <div id="globe" class="globe" hidden></div>
+    <section id="picked" class="popup" role="dialog" aria-label="The picked item" hidden>
+      <button id="picked-close" class="popup-close" type="button" aria-label="Close">&times;</button>
+      <div id="picked-body"></div>
+    </section>
   </section>
   <div id="divider" class="divider" role="separator" tabindex="0" aria-orientation="vertical"
        aria-controls="side" aria-label="Resize the lists"
@@ -57,10 +62,6 @@
     <section id="layers-box" class="box">
       <h2><button class="fold" type="button" aria-expanded="true">Layers · Capas</button></h2>
       <ul id="layers" class="layers"></ul>
-    </section>
-    <section id="picked" class="box picked" hidden>
-      <h2>Selected · Seleccionado</h2>
-      <div id="picked-body"></div>
     </section>
     <div id="panels"></div>
   </aside>

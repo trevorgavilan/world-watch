@@ -58,6 +58,7 @@ STATIC: dict[str, tuple[Path, str]] = {  # served name -> (file, type); nothing 
     "pins.js": (_HERE / "pins.js", "text/javascript; charset=utf-8"),
     "player.js": (_HERE / "player.js", "text/javascript; charset=utf-8"),
     "viewer.js": (_HERE / "viewer.js", "text/javascript; charset=utf-8"),
+    "popup.js": (_HERE / "popup.js", "text/javascript; charset=utf-8"),
     "live.js": (_HERE / "live.js", "text/javascript; charset=utf-8"),
     "live.css": (_HERE / "live.css", "text/css; charset=utf-8"),
     "globe.gl.min.js": (_HERE / "vendor" / "globe.gl-2.46.2.min.js", "text/javascript; charset=utf-8"),
@@ -168,6 +169,8 @@ class Handler(BaseHTTPRequestHandler):
             found = registry.layer(parts[1])
         elif len(parts) == 2 and parts[0] == "panels":
             found = registry.panel(parts[1])
+        elif len(parts) == 2 and parts[0] == "items" and data.ITEM_ID.fullmatch(parts[1]):
+            found = "item"
         if found is None:
             return 404, b"not found\n", "text/plain; charset=utf-8", CSP
         try:
@@ -179,6 +182,10 @@ class Handler(BaseHTTPRequestHandler):
             now = self.server.now()
             if found == "board":
                 body = registry.board(store, now)
+            elif found == "item":
+                body = data.item_detail(store, registry, parts[1])
+                if body is None:
+                    return 404, b"not found\n", "text/plain; charset=utf-8", CSP
             elif parts[0] == "layers":
                 body = data.layer_points(store, found, now)
             else:

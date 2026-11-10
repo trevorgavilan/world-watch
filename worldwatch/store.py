@@ -106,6 +106,9 @@ class Store:
         with self.db:
             self.db.executemany("DELETE FROM items WHERE id = ? AND source = ?", [(i, source) for i in ids])
 
+    def item(self, item_id: str) -> sqlite3.Row | None:
+        return self.db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+
     def count_items(self, source: str | None = None) -> int:
         if source:
             return self.db.execute("SELECT COUNT(*) FROM items WHERE source = ?", (source,)).fetchone()[0]

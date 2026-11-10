@@ -97,7 +97,6 @@ h2 { font-size: 13px; margin: 0 0 6px; color: var(--dim); font-weight: 600; text
 .layers .more[aria-expanded="true"]::before { content: "\25BE"; }
 .layers .more:hover, .layers .more:focus-visible { color: var(--text); outline: 1px solid var(--dim); }
 .layer-detail { margin: 2px 0 4px 48px; color: var(--dim); font-size: 12px; }
-.picked .title { font-weight: 600; }
 
 .entries { list-style: none; margin: 0; padding: 0; }
 .entries li { padding: 7px 0; border-top: 1px solid var(--line); }
@@ -121,6 +120,27 @@ h2 { font-size: 13px; margin: 0 0 6px; color: var(--dim); font-weight: 600; text
 .foot p.error { color: var(--never); }
 .credits { display: flex; gap: 12px; flex-wrap: wrap; list-style: none; margin: 0; padding: 0; }
 .credits a { color: var(--dim); }
+
+/* The pop-up card for a picked pin (popup.js places it): over the map, scrolling inside when long. */
+.popup {
+  position: absolute; z-index: 3; width: min(360px, calc(100% - 16px)); max-height: calc(100% - 60px); overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .65); font-size: 13px;
+}
+.popup-close {
+  all: unset; position: absolute; top: 4px; right: 8px; cursor: pointer; color: var(--dim); font-size: 20px; line-height: 1;
+}
+.popup-close:hover, .popup-close:focus-visible { color: var(--text); outline: 1px solid var(--dim); }
+.popup .title { margin: 0 22px 4px 0; font-weight: 600; }
+.popup .kind { margin: 0 0 6px; color: var(--stale); font-size: 12px; }
+.popup .text { margin: 0 0 6px; overflow-wrap: anywhere; }
+.popup .meta { margin: 1px 0; }
+.popup .links { display: flex; gap: 6px 14px; flex-wrap: wrap; margin: 8px 0 4px; }
+.popup .record { margin-top: 6px; }
+.popup .record summary { cursor: pointer; color: var(--dim); font-size: 12px; }
+.popup .record dl { display: grid; grid-template-columns: minmax(0, max-content) 1fr; gap: 2px 10px; margin: 6px 0 0; font-size: 12px; }
+.popup .record dt { color: var(--dim); overflow-wrap: anywhere; }
+.popup .record dd { margin: 0; overflow-wrap: anywhere; }
 
 /* globe.gl's own rules, copied here: the CSP blocks the <style> tags it would inject. */
 .scene-container .clickable { cursor: pointer; }
