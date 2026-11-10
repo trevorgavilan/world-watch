@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +21,7 @@ from ..views import Layer, Panel
 log = logging.getLogger(__name__)
 
 RATE_LIMIT_TEXT = "Please limit requests"
+XML_DECLARED = re.compile(r"""^﻿?\s*<\?xml[^>]*\bencoding\s*=\s*["']([^"']+)["']""")
 
 
 class ParseError(Exception):
@@ -79,15 +82,38 @@ def decode_json(payload: bytes, source: str) -> object:
         raise ParseError(f"{source}: not JSON ({text[:80]!r})") from err
 
 
+def decode_xml(payload: bytes, source: str) -> ET.Element:
+    """An XML document's root, or ParseError. Only UTF-8 is read, and a DTD or entity declaration is
+    refused before parsing: no feed we read needs one, and it is how XML bombs work. Another encoding
+    could hide the declaration from the check."""
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as err:
+        raise ParseError(f"{source}: not UTF-8") from err
+    declared = XML_DECLARED.match(text)
+    if "\x00" in text or (declared and declared.group(1).lower().replace("_", "-") != "utf-8"):
+        raise ParseError(f"{source}: only UTF-8 XML is read")
+    upper = text.upper()
+    if "<!DOCTYPE" in upper or "<!ENTITY" in upper:
+        raise ParseError(f"{source}: XML with a DTD or entities refused")
+    try:
+        return ET.fromstring(payload)
+    except ET.ParseError as err:
+        raise ParseError(f"{source}: not XML ({err})") from err
+
+
 def all_collectors(base: Path | None = None) -> list[Collector]:
     """The sources in the run. GDELT is parked (D-16): it refused most calls; its adapter and
     tests stay, and it returns by adding `*gdelt.COLLECTORS` here. The status pages (Task 3b) feed the same alerts. Task 4 adds the hazards and Mexico sources, and
-    the near-CDMX quake alerts worked out from USGS and the SSN. The watchlist alerts come first,
+    the near-CDMX quake alerts worked out from USGS and the SSN. The Middle East watch adds the live streams
+    and FIRMS heat detections in the region. The watchlist alerts come first,
     so they lead the Board (the runner still derives them after the fetches); their list lives in
     `<base>/watchlist.txt` (D-20)."""
-    from . import cisa_kev, eonet, epss, firms, gdacs, my_stack, near_cdmx, nvd, osv, smn, ssn, status_pages, swpc, usgs
+    from . import (cisa_kev, eonet, epss, firms, gdacs, live_streams, my_stack, near_cdmx, nvd, osv, smn, ssn,
+                   status_pages, swpc, usgs)
 
     watchlist = (base or Path(__file__).resolve().parents[2] / "data") / "watchlist.txt"
     return [my_stack.collector(watchlist), near_cdmx.COLLECTOR, usgs.COLLECTOR, ssn.COLLECTOR, cisa_kev.COLLECTOR,
             nvd.COLLECTOR, osv.COLLECTOR, epss.COLLECTOR, *status_pages.COLLECTORS,
-            gdacs.COLLECTOR, eonet.COLLECTOR, firms.COLLECTOR, swpc.COLLECTOR, smn.COLLECTOR]
+            gdacs.COLLECTOR, eonet.COLLECTOR, firms.COLLECTOR, swpc.COLLECTOR, smn.COLLECTOR,
+            *live_streams.COLLECTORS, firms.MIDEAST_COLLECTOR]

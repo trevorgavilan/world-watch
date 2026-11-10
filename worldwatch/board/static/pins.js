@@ -62,6 +62,10 @@ window.WWPins = (() => {
     },
     eonet: (p) => ({ shape: "diamond", color: eonetColor(p), r: 5, pin: false, label: null }),
     fires: (p) => ({ shape: "speck", color: "#ff8c2a", r: 1.5 + p.weight * 2.5, pin: false, label: null }),
+    // Heat in the Middle East: a redder speck than Mexico's fires; FIRMS can't tell a fire from a strike.
+    "heat-mideast": (p) => ({ shape: "speck", color: "#ff5a3c", r: 1.5 + p.weight * 2.5, pin: false, label: null }),
+    // A live cam: a pinned square, labelled LIVE; a click puts it in the viewer.
+    "live-cams": () => ({ shape: "square", color: "#ff3b5c", r: 5, pin: true, label: "LIVE" }),
   };
 
   function style(layerId, point) {
@@ -71,7 +75,7 @@ window.WWPins = (() => {
   }
 
   function clusters(layerId) {
-    return layerId === "fires";
+    return layerId === "fires" || layerId === "heat-mideast";
   }
 
   function shape(ctx, kind, x, y, r, color) {
@@ -81,6 +85,8 @@ window.WWPins = (() => {
       ctx.lineTo(x + r * 0.95, y + r * 0.7);
       ctx.lineTo(x - r * 0.95, y + r * 0.7);
       ctx.closePath();
+    } else if (kind === "square") {
+      ctx.rect(x - r, y - r, r * 2, r * 2);
     } else if (kind === "diamond") {
       ctx.moveTo(x, y - r);
       ctx.lineTo(x + r, y);

@@ -132,10 +132,10 @@ class Binding(BoardCase):
         from worldwatch.board.data import Registry
         from worldwatch.collectors import all_collectors
         registry = Registry(all_collectors())
-        self.assertEqual(set(registry.layers), {"quakes", "ssn-quakes", "gdacs", "eonet", "fires"})
+        self.assertEqual(set(registry.layers), {"quakes", "ssn-quakes", "gdacs", "eonet", "fires", "live-cams", "heat-mideast"})
         self.assertEqual(set(registry.panels), {"kev", "nvd", "osv", "epss", "my-stack", "github-status", "cloudflare-status",
                                                 "claude-status", "google-workspace-status", "near-cdmx",
-                                                "space-weather", "cdmx-weather"})
+                                                "space-weather", "cdmx-weather", "live-cams", "live-news"})
 
 
 class HostHeader(BoardCase):
@@ -169,24 +169,37 @@ class Csp(BoardCase):
         return resp.getheader("Content-Security-Policy") or ""
 
     def test_every_response_carries_the_strict_policy(self):
-        for path in ("/", "/api/board", "/static/board.js", "/nope", "/api/layers/nope"):
+        for path in ("/", "/live", "/api/board", "/static/board.js", "/static/player.js", "/nope", "/api/layers/nope"):
             policy = self.csp(path)
             directives = dict((d.split()[0], d.split()[1:]) for d in policy.split(";") if d.strip())
             self.assertEqual(directives.get("default-src"), ["'none'"], path)
             self.assertEqual(directives.get("script-src"), ["'self'"], path)
             self.assertNotIn("unsafe-inline", policy)
             self.assertNotIn("unsafe-eval", policy)
-            self.assertNotRegex(policy, r"nonce-|sha\d+-|https?:|\*|data:")
+            self.assertNotRegex(policy.replace(" frame-src https://www.youtube-nocookie.com;", ""),
+                                r"nonce-|sha\d+-|https?:|\*|data:")
             self.assertEqual(directives.get("frame-ancestors"), ["'none'"], path)
 
+    def test_only_the_two_player_pages_may_frame_and_only_youtube_nocookie(self):  # D-24
+        for path in ("/", "/live"):
+            policy = self.csp(path)
+            self.assertEqual(policy, board.PLAYER_CSP, path)
+            directives = dict((d.split()[0], d.split()[1:]) for d in policy.split(";") if d.strip())
+            self.assertEqual(directives["frame-src"], ["https://www.youtube-nocookie.com"])
+            self.assertEqual(policy.replace("frame-src https://www.youtube-nocookie.com; ", ""), board.CSP)
+        for path in ("/api/board", "/api/panels/kev", "/static/board.js", "/static/player.js", "/nope"):
+            self.assertEqual(self.csp(path), board.CSP, path)
+            self.assertNotIn("frame-src", self.csp(path))
+
     def test_page_has_no_inline_script_or_handlers(self):
-        html = (STATIC / "board.html").read_text(encoding="utf-8")
-        scripts = re.findall(r"<script\b([^>]*)>(.*?)</script>", html, re.S | re.I)
-        self.assertTrue(scripts)
-        for attrs, body in scripts:
-            self.assertRegex(attrs, r'src="/static/[\w.-]+"')
-            self.assertEqual(body.strip(), "")
-        self.assertNotRegex(html, r"(?i)\son\w+\s*=|\sstyle\s*=|javascript:")
+        for name in ("board.html", "live.html"):
+            html = (STATIC / name).read_text(encoding="utf-8")
+            scripts = re.findall(r"<script\b([^>]*)>(.*?)</script>", html, re.S | re.I)
+            self.assertTrue(scripts, name)
+            for attrs, body in scripts:
+                self.assertRegex(attrs, r'src="/static/[\w.-]+"')
+                self.assertEqual(body.strip(), "")
+            self.assertNotRegex(html, r"(?i)\son\w+\s*=|\sstyle\s*=|javascript:|<iframe")
 
     def test_http_servers_own_errors_carry_the_policy_too(self):
         for raw in (b"BREW / HTTP/1.0\r\n\r\n", b"GET /" + b"a" * 70000 + b" HTTP/1.0\r\n\r\n"):
@@ -216,11 +229,17 @@ class Csp(BoardCase):
 
 class NoOutsideRequests(BoardCase):
     def test_page_files_name_no_other_host(self):
-        for name in ("board.html", "board.js", "map.js", "pins.js", "board.css"):
+        for name in ("board.html", "board.js", "map.js", "pins.js", "board.css", "viewer.js", "live.html", "live.js",
+                     "live.css"):
             text = (STATIC / name).read_text(encoding="utf-8")
             self.assertIsNone(re.search(r"(?i)\b(https?:)?//[a-z0-9]", text), name)
             if name.endswith((".css", ".html")):  # in CSS, url() and @import may name only this server's own files
                 self.assertIsNone(re.search(r"(?i)@import|url\(\s*['\"]?(?!/static/)", text), name)
+
+    def test_the_player_names_youtube_and_nothing_else(self):  # D-24: the one file that names a host
+        js = (STATIC / "player.js").read_text(encoding="utf-8")
+        hosts = set(re.findall(r"https?:(?:\\/|/){2}([\w.\\-]+)", js))
+        self.assertEqual({h.replace("\\", "") for h in hosts}, {"www.youtube-nocookie.com", "www.youtube.com"})
 
     def test_policy_lets_the_page_reach_only_itself(self):
         resp, _ = request(self.srv, "/")
@@ -277,7 +296,7 @@ class TextNotHtml(unittest.TestCase):
         self.assertIn(HOSTILE, titles)
 
     def test_page_script_never_writes_html(self):
-        for name in ("board.js", "map.js", "pins.js"):
+        for name in ("board.js", "map.js", "pins.js", "player.js", "viewer.js", "live.js"):
             self.assertNotRegex((STATIC / name).read_text(encoding="utf-8"),
                                 r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function|"
                                 r"setAttribute\(\s*['\"](on|style|href)", name)
@@ -307,6 +326,15 @@ class TextNotHtml(unittest.TestCase):
         self.assertIsNotNone(re.search(r"\.href\s*=\s*safe", js))
         for name in ("map.js", "pins.js"):  # the map hands a picked point to board.js; it never makes a link
             self.assertIsNone(re.search(r"\.href\s*=|\.src\s*=(?!\s*[\"']/static/)", (STATIC / name).read_text(encoding="utf-8")), name)
+        for name in ("viewer.js", "live.js"):  # a stream's link only through the player's own check
+            js = (STATIC / name).read_text(encoding="utf-8")
+            sets = re.findall(r"\.href\s*=\s*([^;]+);", js)
+            self.assertTrue(sets, name)
+            self.assertTrue(all(s.strip() == "P.watchUrl(e)" for s in sets), (name, sets))
+            self.assertIsNone(re.search(r"\.src\s*=", js), name)
+        player = (STATIC / "player.js").read_text(encoding="utf-8")
+        self.assertEqual(re.findall(r"\.src\s*=\s*([^;]+);", player), ["src"], "a frame's address comes from embedUrl only")
+        self.assertIn("const src = embedUrl(entry, autoplay);", player)
 
 
 class ReadOnly(BoardCase):

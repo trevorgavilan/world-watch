@@ -13,6 +13,7 @@ window.WWMap = (() => {
   const AREAS = {
     world: { west: -180, east: 180, south: -90, north: 90 },
     mexico: { west: -118.5, east: -86, south: 14, north: 33 },
+    mideast: { west: 25, east: 63.5, south: 12, north: 42 },
   };
 
   function valid(p) {
@@ -238,7 +239,9 @@ window.WWMap = (() => {
     }
 
     function tipText(m) {
-      if (m.kind === "cluster") return m.n + " fire detections here: click to zoom in";
+      if (m.kind === "cluster") {
+        return m.n + (m.layer === "fires" ? " fire" : " heat") + " detections here: click to zoom in";
+      }
       if (m.kind === "cdmx") {
         return m.n ? "CDMX: " + m.n + " quake alert(s) in the near-CDMX list. Latest: " + m.point.title
           : "CDMX: no quake alert in the near-CDMX list. Rings: 150, 400, 700, 1,200 km";

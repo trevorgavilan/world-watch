@@ -8,7 +8,8 @@ Safety, each with a test in tests/test_board.py:
 - binds 127.0.0.1, nothing else; a request whose Host is not this server's own name is refused
   (421), so a hostile site rebinding its name to 127.0.0.1 gets nothing (DNS rebinding);
 - no route writes: anything but GET/HEAD is 405;
-- a CSP that lets the page load only its own files, with no inline script at all;
+- a CSP that lets the page load only its own files, with no inline script at all; the Board and the
+  live console (/live) may also frame YouTube's privacy-enhanced player, nothing else (D-24);
 - only the files listed in STATIC are served — no path from the request reaches the disk;
 - source text goes out as JSON (with < > & escaped) and the page sets it as text, never HTML;
   links are re-checked as http(s) here and again in the page.
@@ -36,6 +37,10 @@ BOARD_PORT = 8420  # NEMATIC SERVERS: 8000, 8010 and 8800 are taken
 
 CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; "
        "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+# D-24: the two pages that play the Middle East live streams may frame YouTube's privacy-enhanced
+# player, and nothing else. Its scripts run inside the frame (another origin, sandboxed), never here.
+PLAYER_ORIGIN = "https://www.youtube-nocookie.com"
+PLAYER_CSP = CSP.replace("connect-src 'self'; ", f"connect-src 'self'; frame-src {PLAYER_ORIGIN}; ")
 SAFETY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
@@ -51,11 +56,16 @@ STATIC: dict[str, tuple[Path, str]] = {  # served name -> (file, type); nothing 
     "board.css": (_HERE / "board.css", "text/css; charset=utf-8"),
     "map.js": (_HERE / "map.js", "text/javascript; charset=utf-8"),
     "pins.js": (_HERE / "pins.js", "text/javascript; charset=utf-8"),
+    "player.js": (_HERE / "player.js", "text/javascript; charset=utf-8"),
+    "viewer.js": (_HERE / "viewer.js", "text/javascript; charset=utf-8"),
+    "live.js": (_HERE / "live.js", "text/javascript; charset=utf-8"),
+    "live.css": (_HERE / "live.css", "text/css; charset=utf-8"),
     "globe.gl.min.js": (_HERE / "vendor" / "globe.gl-2.46.2.min.js", "text/javascript; charset=utf-8"),
     "earth.jpg": (_HERE / "vendor" / "earth-blue-marble-5400x2700.jpg", "image/jpeg"),
 }
 PINNED = {"/static/globe.gl.min.js", "/static/earth.jpg"}
 PAGE = _HERE / "board.html"
+LIVE_PAGE = _HERE / "live.html"  # the Middle East live console: several streams at once
 MAX_DRAIN = 64 * 1024  # bytes of a refused request's body read and dropped; more and the connection just closes
 
 
@@ -134,7 +144,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _route(self, path: str) -> tuple[int, bytes, str, str]:
         if path == "/":
-            return 200, PAGE.read_bytes(), "text/html; charset=utf-8", CSP
+            return 200, PAGE.read_bytes(), "text/html; charset=utf-8", PLAYER_CSP
+        if path == "/live":
+            return 200, LIVE_PAGE.read_bytes(), "text/html; charset=utf-8", PLAYER_CSP
         if path.startswith("/static/") and path[len("/static/"):] in STATIC:
             file, kind = STATIC[path[len("/static/"):]]
             return 200, file.read_bytes(), kind, CSP

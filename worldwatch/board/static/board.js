@@ -2,6 +2,7 @@
    Source text is data: it is only ever set with textContent, and a link is used only after
    safe() re-checks it as http(s) (D-17). globe.gl renders point labels as HTML, so they stay off.
    The flat map (map.js, pins.js) is the main view; the globe is loaded only when asked for.
+   The Middle East live streams play in the viewer (viewer.js, player.js), the one outside frame (D-24).
    The layout (the view, the map / list split, folded lists) is remembered in this browser's localStorage. */
 "use strict";
 
@@ -14,6 +15,8 @@
   const FOLD_KEY = "ww.board.folded";    // the ids of the folded lists
   const VIEW_KEY = "ww.board.view";      // "map" or "globe"
   const ALERT_PANEL = "near-cdmx";       // its entries turn the CDMX mark on the map red
+  const LIVE_PANELS = ["live-cams", "live-news"];  // the Middle East live streams: in the viewer, not as lists
+  const LIVE_SOURCE = "mideast-cams";    // a click on one of its cams on the map puts it in the viewer
   const SIDE_MIN = 260;
   const GLOBE_MIN = 300;
   const KEY_STEP = 20;
@@ -25,7 +28,7 @@
 
   const state = {
     globe: null, map: null, view: "map", layers: [], shown: {}, points: {}, now: null,
-    side: null, folded: new Set(), sources: [], detail: null,
+    side: null, folded: new Set(), sources: [], detail: null, viewer: null,
   };
 
   function el(tag, text, cls) {
@@ -204,6 +207,7 @@
     const map = window.WWMap.create($("map"), pick);
     $("go-world").addEventListener("click", () => map.show("world"));
     $("go-mexico").addEventListener("click", () => map.show("mexico"));
+    $("go-mideast").addEventListener("click", () => map.show("mideast"));
     $("zoom-in").addEventListener("click", () => map.zoom(1.5));
     $("zoom-out").addEventListener("click", () => map.zoom(1 / 1.5));
     return map;
@@ -289,6 +293,19 @@
       line("Source:", point.source),
     );
     $("picked").hidden = false;
+    if (point.source === LIVE_SOURCE && state.viewer) state.viewer.show(point.id);
+  }
+
+  function liveMeta(e) {
+    const cam = window.WWPlayer.isCam(e);  // a cam's link was checked; a news channel is only listed
+    return (cam ? "Live cam" : "Live news") + " · " + window.WWPlayer.owner(e) + " · " + (cam ? "checked " : "listed ") +
+      when(e.fetched_at, false) + " (" + ago(e.fetched_at) + ")";
+  }
+
+  function makeViewer() {
+    if (!window.WWViewer || !window.WWPlayer) return null;
+    return window.WWViewer.create({ box: "live-box", stage: "live-stage", prev: "live-prev", next: "live-next",
+      count: "live-count", console: "live-console", title: "live-title", meta: "live-meta" }, liveMeta);
   }
 
   function drawPoints() {
@@ -350,6 +367,7 @@
     list.replaceChildren();
     credits.replaceChildren();
     const counts = { ok: 0, stale: 0, never: 0 };
+    const shownCredits = new Set();
     for (const s of sources) {
       const kind = s.last_ok_at ? (s.stale ? "stale" : "ok") : "never";
       counts[kind] += 1;
@@ -366,7 +384,8 @@
       const item = el("li");
       item.append(dot);
       list.append(item);
-      if (s.credit) {
+      if (s.credit && !shownCredits.has(s.credit)) {  // two sources of one provider: one credit
+        shownCredits.add(s.credit);
         const credit = el("li");
         credit.append(link(s.credit, s.credit_url));
         credits.append(credit);
@@ -413,7 +432,11 @@
       const panelBodies = await Promise.all(board.panels.map((p) => getJson("/api/panels/" + encodeURIComponent(p.id))));
       const focused = document.activeElement && document.activeElement.dataset
         ? document.activeElement.dataset.key : undefined;
-      $("panels").replaceChildren(...board.panels.map((p, i) => drawPanel(p, panelBodies[i])));
+      const paired = board.panels.map((p, i) => [p, panelBodies[i]]);
+      const lists = paired.filter(([p]) => !LIVE_PANELS.includes(p.id));
+      $("panels").replaceChildren(...lists.map(([p, body]) => drawPanel(p, body)));
+      const live = paired.filter(([p]) => LIVE_PANELS.includes(p.id)).flatMap(([, body]) => body.entries);
+      if (state.viewer) state.viewer.update(live);
       drawFreshness(board.sources);
       drawLayers();
       drawPoints();
@@ -446,6 +469,7 @@
     }
   });
   state.map = makeMap();
+  state.viewer = makeViewer();
   $("view-map").addEventListener("click", () => setView("map", true));
   $("view-globe").addEventListener("click", () => setView("globe", true));
   setView(recall(VIEW_KEY), false);

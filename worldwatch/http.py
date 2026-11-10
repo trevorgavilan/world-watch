@@ -18,7 +18,9 @@ CHUNK_BYTES = 64 * 1024
 
 # GDELT asks for at most one request every 5 seconds, NIST for six seconds between NVD requests;
 # OSV's bucket states no limit, so a second between record files. Leave a margin.
-HOST_MIN_GAP_S = {"api.gdeltproject.org": 6.0, "services.nvd.nist.gov": 6.5, "storage.googleapis.com": 1.0}
+# YouTube throttles quick runs of requests (its channel feeds answered 404/500, 2026-11-09): oEmbed is spaced.
+HOST_MIN_GAP_S = {"api.gdeltproject.org": 6.0, "services.nvd.nist.gov": 6.5, "storage.googleapis.com": 1.0,
+                  "www.youtube.com": 4.0}
 
 
 class FetchError(Exception):

@@ -43,6 +43,7 @@ CREDITS = [
     ("nasa-firms", "NASA FIRMS — Fire Information for Resource Management System", "https://firms.modaps.eosdis.nasa.gov/"),
     ("noaa-swpc", "Space Weather Prediction Center, NOAA", "https://www.spaceweather.gov/"),
     ("smn-cdmx", "Servicio Meteorológico Nacional (SMN) / CONAGUA", "https://smn.conagua.gob.mx/"),
+    ("mideast-", "Live streams: each owner's own channel, played by YouTube", "https://www.youtube.com/t/terms"),
 ]
 
 

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Middle East live · World Watch</title>
+<link rel="stylesheet" href="/static/live.css">
+<script src="/static/player.js" defer></script>
+<script src="/static/live.js" defer></script>
+</head>
+<body>
+<header class="bar">
+  <h1>Middle East live <span class="es">· Medio Oriente en vivo</span></h1>
+  <div class="seg" role="group" aria-label="How many at once">
+    <button type="button" data-layout="1" aria-pressed="false">1</button>
+    <button type="button" data-layout="4" aria-pressed="true">4</button>
+    <button type="button" data-layout="6" aria-pressed="false">6</button>
+    <button type="button" data-layout="9" aria-pressed="false">9</button>
+  </div>
+  <p id="checked" class="checked"></p>
+  <a class="back" href="/">Back to the Board</a>
+</header>
+<p class="note">Each stream is its owner's own YouTube channel, played in YouTube's privacy-enhanced mode:
+Google sees your address and what you watch. The first plays by itself, muted; press play on the others.
+Live pictures and news are what their owners show — not verified here.</p>
+<main id="grid" class="grid" data-layout="4"></main>
+<p id="status" class="status" role="status"></p>
+</body>
+</html>

@@ -7,6 +7,8 @@
 <title>World Watch Board</title>
 <link rel="stylesheet" href="/static/board.css">
 <script src="/static/pins.js" defer></script>
+<script src="/static/player.js" defer></script>
+<script src="/static/viewer.js" defer></script>
 <script src="/static/map.js" defer></script>
 <script src="/static/board.js" defer></script>
 </head>
@@ -28,6 +30,7 @@
       <div id="map-tools" class="seg" role="group" aria-label="Map controls">
         <button id="go-world" type="button">World</button>
         <button id="go-mexico" type="button">Mexico</button>
+        <button id="go-mideast" type="button">Middle East</button>
         <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
         <button id="zoom-out" type="button" aria-label="Zoom out">&minus;</button>
       </div>
@@ -39,6 +42,18 @@
        aria-controls="side" aria-label="Resize the lists"
        title="Drag, or use the arrow keys (Home, End), to share the space; double-click for the default"></div>
   <aside id="side" class="side">
+    <section id="live-box" class="box live" aria-label="Middle East live streams" hidden>
+      <h2>Middle East live · Medio Oriente en vivo</h2>
+      <div id="live-stage" class="live-stage"></div>
+      <div class="live-controls">
+        <button id="live-prev" type="button" data-key="live:prev" aria-label="Previous stream">&#9664;</button>
+        <span id="live-count" class="live-count"></span>
+        <button id="live-next" type="button" data-key="live:next" aria-label="Next stream">&#9654;</button>
+        <button id="live-console" type="button" data-key="live:console">Open the console &#8599;</button>
+      </div>
+      <p id="live-title" class="title"></p>
+      <p id="live-meta" class="meta"></p>
+    </section>
     <section id="layers-box" class="box">
       <h2><button class="fold" type="button" aria-expanded="true">Layers · Capas</button></h2>
       <ul id="layers" class="layers"></ul>
