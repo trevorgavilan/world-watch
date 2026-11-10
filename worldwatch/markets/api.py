@@ -28,6 +28,12 @@ def _rows(store: Store, source: str, now: datetime, window: timedelta, limit: in
                                          limit=limit)]
 
 
+def _last_error(store: Store, source: str) -> str | None:
+    """Why a source has nothing yet (a key not set, a failing fetch): shown on its empty tiles."""
+    state = store.source_state(source)
+    return state["last_error"] if state and state["last_error"] else None
+
+
 def markets_body(store: Store, collectors: list, data_dir: Path, now: datetime) -> dict:
     sources = [c.source for c in collectors if c.channel == CHANNEL]
     number_sources = [s for s in sources if s not in NOT_SHOWN]
@@ -49,5 +55,6 @@ def markets_body(store: Store, collectors: list, data_dir: Path, now: datetime) 
         "paper": book,
         "paper_problem": book_problem,
         "glossary": glossary.glossary(),
+        "waiting": {src: _last_error(store, src) for src in number_sources if _last_error(store, src)},
     }
     return markets_view(store, number_sources, now, watch=watch, extra=extra)

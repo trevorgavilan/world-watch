@@ -31,6 +31,8 @@ def markets_store():
                       obs("amx", "20.00", NOW - timedelta(hours=1))])
     book = paper.trade(paper.empty(), store, "buy", "amx", "10", NOW)
     paper.save(base / "paper.json", book)
+    store.record_run("fred", NOW, NOW, ok=False, n_items=0, error="needs WW_FRED_KEY (a Windows user environment "
+                     "variable Trevor creates)", next_due=iso_utc(NOW), fail_count=0)
     store.close()
     (base / "markets.txt").write_text("peso above 18.50\nwatch NVDA\nwhat is this\n", encoding="utf-8")
     at = iso_utc(NOW)
@@ -124,7 +126,7 @@ class Page(unittest.TestCase):
         btc = self.text(".tile[data-id='bitcoin-usd']")
         self.assertIn("74,732.77", btc)
         self.assertIn("(as reported, 24 h)", btc)
-        self.assertIn("No number yet", self.text(".tile[data-id='sp500']"))
+        self.assertIn("No number yet from fred — needs WW_FRED_KEY", self.text(".tile[data-id='sp500']"))
         numbered = self.b.run("[...document.querySelectorAll('.tile')].filter((t) => t.querySelector('.value'))"
                               ".every((t) => t.querySelector('.tag') && t.querySelector('.tag').textContent === 'Delayed')")
         self.assertTrue(numbered)

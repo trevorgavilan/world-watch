@@ -13,7 +13,7 @@
     timeZone: TZ, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
   });
   const day = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short", day: "2-digit", month: "short", year: "numeric" });
-  const state = { now: null, terms: {}, open: new Set() };
+  const state = { now: null, terms: {}, open: new Set(), waiting: {} };
 
   function el(tag, text, cls) {
     const node = document.createElement(tag);
@@ -129,7 +129,8 @@
     const more = termButton(item.term, box, "tile:" + item.id);
     if (more) name.append(more);
     if (!item.latest) {
-      box.append(el("p", "No number yet — waiting for " + item.source + ".", "empty"));
+      const why = state.waiting[item.source];
+      box.append(el("p", `No number yet from ${item.source}` + (why ? ` — ${why}.` : "."), "empty"));
       box.append(el("p", item.delay_en, "meta"));
       return box;
     }
@@ -239,6 +240,7 @@
   function draw(body) {
     state.now = body.now;
     state.terms = Object.fromEntries((body.glossary || []).map((t) => [t.id, t]));
+    state.waiting = body.waiting || {};
     $("disclaimer").textContent = `${body.disclaimer_en} ${body.disclaimer_es}`;
     $("updated").textContent = "Updated " + when(body.now, false);
     $("alerts-box").hidden = !body.alerts.length;
