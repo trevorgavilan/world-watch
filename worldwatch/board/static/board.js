@@ -23,6 +23,7 @@
   const GLOBE_MIN = 300;
   const KEY_STEP = 20;
   const FOOT_MIN = 28;   // one line: the status
+  const FOOT_DEFAULT = 42;  // the status line with room to breathe (Trevor, 10 Nov); the credits scroll below it
   const BOARD_MIN = 200; // the map and lists keep at least this much height
 
   const moment = new Intl.DateTimeFormat("en-GB", {
@@ -31,7 +32,7 @@
   const day = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "2-digit", month: "short", year: "numeric" });
 
   const state = {
-    globe: null, map: null, view: "map", layers: [], shown: {}, points: {}, now: null,
+    globe: null, map: null, view: "map", layers: [], shown: {}, openLayers: new Set(), points: {}, now: null,
     side: null, folded: new Set(), sources: [], detail: null, viewer: null,
   };
 
@@ -143,7 +144,7 @@
     if (keep) remember(SIDE_KEY, String(state.side));
   }
 
-  /* The bottom strip (status and credits). null means its natural height. */
+  /* The bottom strip (status and credits). null means its default height. */
   function storedFoot() {
     const raw = recall(FOOT_KEY);
     return raw !== null && /^\d{1,4}$/.test(raw) ? Number(raw) : null;
@@ -157,8 +158,7 @@
 
   function applyFoot() {
     const foot = $("foot");
-    if (state.foot === null) foot.style.removeProperty("--foot");
-    else foot.style.setProperty("--foot", clampFoot(state.foot) + "px");
+    foot.style.setProperty("--foot", clampFoot(state.foot === null ? FOOT_DEFAULT : state.foot) + "px");
     const handle = $("foot-divider");
     handle.setAttribute("aria-valuenow", String(foot.offsetHeight));
     handle.setAttribute("aria-valuemin", String(FOOT_MIN));
@@ -200,7 +200,7 @@
       e.preventDefault();
       setFoot($("foot").offsetHeight + step, true);  // Home: tallest, End: one line
     });
-    handle.addEventListener("dblclick", () => {  // back to its natural height
+    handle.addEventListener("dblclick", () => {  // back to its default height
       state.foot = null;
       applyFoot();
       remember(FOOT_KEY, "");
@@ -398,13 +398,31 @@
         state.shown[layer.id] = box.checked;
         drawPoints();
       });
+      // One line each: the box, the swatch, the name and the count; the rest behind the arrow (Trevor, 10 Nov).
       const label = el("label");
       const count = (state.points[layer.id] || []).length;
       label.append(box);
       if (window.WWPins) label.append(window.WWPins.swatch(layer.id));
-      label.append(el("span", layer.en + " · " + layer.es), el("span", "(" + count + ", " + layer.source + ")", "count"));
+      label.append(el("span", layer.en, "name"), el("span", String(count), "count"));
+      const detail = el("p", layer.es + " · " + count + " on the map · source: " + layer.source, "layer-detail");
+      const open = state.openLayers.has(layer.id);  // kept across the minute's redraw
+      detail.hidden = !open;
+      const more = el("button", "", "more");
+      more.type = "button";
+      more.dataset.key = "layer-more:" + layer.id;
+      more.setAttribute("aria-expanded", String(open));
+      more.setAttribute("aria-label", "Details: " + layer.en);
+      more.addEventListener("click", () => {
+        const now = detail.hidden;
+        detail.hidden = !now;
+        more.setAttribute("aria-expanded", String(now));
+        if (now) state.openLayers.add(layer.id);
+        else state.openLayers.delete(layer.id);
+      });
+      const row = el("div", "", "layer-row");
+      row.append(label, more);
       const item = el("li");
-      item.append(label);
+      item.append(row, detail);
       list.append(item);
     }
     if (!state.layers.length) list.append(el("li", "No layers yet.", "empty"));

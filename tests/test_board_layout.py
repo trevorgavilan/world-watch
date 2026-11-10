@@ -205,6 +205,7 @@ class Layout(unittest.TestCase):
 
     def test_the_bottom_strip_has_keys_limits_and_a_default(self):
         natural = self.b.run(FOOT)
+        self.assertAlmostEqual(natural, 42, delta=1, msg="the default: the status line (Trevor, 10 Nov)")
         self.b.run("document.querySelector('#foot-divider').focus()")
         self.b.key("ArrowUp", "ArrowUp", 38)
         self.assertAlmostEqual(self.b.run(FOOT), natural + 20, delta=1)
@@ -240,6 +241,34 @@ class Layout(unittest.TestCase):
                 self.reload()
                 self.assertGreaterEqual(self.b.run(FOOT), 28, foot)
                 self.assertGreaterEqual(self.b.run(BOARD_H), 199, foot)
+
+    # -- the layer list: one line each, the details behind an arrow (Trevor, 10 Nov) -----------------
+
+    def test_a_layer_is_one_line_until_opened(self):
+        rows = self.b.run("[...document.querySelectorAll('#layers li')].map((li) => [li.querySelector('.name').textContent,"
+                          " li.querySelector('.layer-row').getBoundingClientRect().height])")
+        self.assertTrue(rows)
+        for name, height in rows:  # the heat layer may take two: its "not strikes" is never cut off
+            self.assertLessEqual(height, 44 if "not strikes" in name else 24, name)
+        first = "document.querySelector('#layers li')"
+        self.assertTrue(self.b.run(f"{first}.querySelector('.layer-detail').hidden"))
+        self.b.run(f"{first}.querySelector('.more').click()")
+        self.assertFalse(self.b.run(f"{first}.querySelector('.layer-detail').hidden"))
+        self.assertIn("source:", self.b.run(f"{first}.querySelector('.layer-detail').textContent"))
+        self.assertEqual(self.b.run(f"{first}.querySelector('.more').getAttribute('aria-expanded')"), "true")
+        self.assertTrue(self.b.run(f"{first}.querySelector('input').checked"), "the arrow never toggles the layer")
+
+    def test_an_opened_layer_stays_open_through_the_refresh(self):
+        fast = self.b.before_each_page("const realEvery = window.setInterval; window.setInterval = (f) => realEvery(f, 300);")
+        try:
+            self.reload()
+            self.b.run("document.querySelector('#layers li .more').click(); document.querySelector('#layers li').__old = true")
+            self.b.wait_for("!document.querySelector('#layers li').__old", timeout=5)  # the list was drawn again
+            self.assertFalse(self.b.run("document.querySelector('#layers li .layer-detail').hidden"))
+            self.assertTrue(self.b.run("document.querySelectorAll('#layers .layer-detail:not([hidden])').length === 1"))
+        finally:
+            self.b.forget_script(fast)
+            self.reload()
 
     # -- folding lists -----------------------------------------------------------------------------
 

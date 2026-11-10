@@ -178,6 +178,20 @@ class Viewer(LiveCase):
         headings = self.b.run("[...document.querySelectorAll('#panels h2')].map((h) => h.textContent)")
         self.assertFalse([h for h in headings if "live" in h.lower()], headings)
 
+    def test_the_player_fits_its_column(self):  # Trevor, 10 Nov: it ran past the right edge, off centre
+        for side in (260, 330, 700):
+            with self.subTest(side=side):
+                self.b.run(f"localStorage.setItem('ww.board.side', '{side}')")
+                self.b.open(self.url, READY)
+                stage, box = self.b.run("[document.querySelector('#live-stage').getBoundingClientRect(),"
+                                        " document.querySelector('#live-box').getBoundingClientRect()]"
+                                        ".map((r) => [r.left, r.right, r.width, r.height])")
+                self.assertGreaterEqual(stage[0], box[0] - 0.5)
+                self.assertLessEqual(stage[1], box[1] + 0.5)
+                self.assertAlmostEqual(stage[2], box[2], delta=1, msg="as wide as the column")
+                self.assertAlmostEqual(stage[3], stage[2] * 9 / 16, delta=2)
+        self.b.run("localStorage.removeItem('ww.board.side')")
+
     def test_the_middle_east_button_and_the_heat_layer(self):
         self.click("go-mideast")
         self.b.run("new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))")
