@@ -124,11 +124,12 @@ class Browser:
         self.call("Input.dispatchMouseEvent", type=kind, x=x, y=y, button="left",
                   buttons=buttons, clickCount=1 if kind != "mouseMoved" else 0)
 
-    def drag(self, x: float, y: float, to_x: float):
+    def drag(self, x: float, y: float, to_x: float, to_y: float | None = None):
+        to_y = y if to_y is None else to_y
         self.mouse("mousePressed", x, y)
         for step in range(1, 6):
-            self.mouse("mouseMoved", x + (to_x - x) * step / 5, y)
-        self.mouse("mouseReleased", to_x, y, buttons=0)
+            self.mouse("mouseMoved", x + (to_x - x) * step / 5, y + (to_y - y) * step / 5)
+        self.mouse("mouseReleased", to_x, to_y, buttons=0)
 
     def key(self, key: str, code: str, key_code: int):
         for kind in ("rawKeyDown", "keyUp"):

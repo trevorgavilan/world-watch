@@ -3,7 +3,8 @@
    safe() re-checks it as http(s) (D-17). globe.gl renders point labels as HTML, so they stay off.
    The flat map (map.js, pins.js) is the main view; the globe is loaded only when asked for.
    The Middle East live streams play in the viewer (viewer.js, player.js), the one outside frame (D-24).
-   The layout (the view, the map / list split, folded lists) is remembered in this browser's localStorage. */
+   The layout (the view, the map / list split, the bottom strip's height, folded lists) is remembered in this
+   browser's localStorage. */
 "use strict";
 
 (() => {
@@ -12,6 +13,7 @@
   const FIRST_RETRY_MS = 3 * 1000;
   const $ = (id) => document.getElementById(id);
   const SIDE_KEY = "ww.board.side";      // the list column's width, in px
+  const FOOT_KEY = "ww.board.foot";      // the bottom strip's height, in px
   const FOLD_KEY = "ww.board.folded";    // the ids of the folded lists
   const VIEW_KEY = "ww.board.view";      // "map" or "globe"
   const ALERT_PANEL = "near-cdmx";       // its entries turn the CDMX mark on the map red
@@ -20,6 +22,8 @@
   const SIDE_MIN = 260;
   const GLOBE_MIN = 300;
   const KEY_STEP = 20;
+  const FOOT_MIN = 28;   // one line: the status
+  const BOARD_MIN = 200; // the map and lists keep at least this much height
 
   const moment = new Intl.DateTimeFormat("en-GB", {
     timeZone: TZ, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
@@ -137,6 +141,73 @@
     state.side = clampSide(px);
     applySide();
     if (keep) remember(SIDE_KEY, String(state.side));
+  }
+
+  /* The bottom strip (status and credits). null means its natural height. */
+  function storedFoot() {
+    const raw = recall(FOOT_KEY);
+    return raw !== null && /^\d{1,4}$/.test(raw) ? Number(raw) : null;
+  }
+
+  function clampFoot(px) {
+    let room = document.body.clientHeight - BOARD_MIN;  // the board (map and lists) never goes under its floor
+    for (const el of document.body.children) if (el.id !== "board" && el.id !== "foot") room -= el.offsetHeight;
+    return Math.round(Math.max(FOOT_MIN, Math.min(px, room)));
+  }
+
+  function applyFoot() {
+    const foot = $("foot");
+    if (state.foot === null) foot.style.removeProperty("--foot");
+    else foot.style.setProperty("--foot", clampFoot(state.foot) + "px");
+    const handle = $("foot-divider");
+    handle.setAttribute("aria-valuenow", String(foot.offsetHeight));
+    handle.setAttribute("aria-valuemin", String(FOOT_MIN));
+    handle.setAttribute("aria-valuemax", String(clampFoot(Infinity)));
+    handle.setAttribute("aria-valuetext", "bottom strip " + foot.offsetHeight + " pixels tall");
+  }
+
+  function setFoot(px, keep) {
+    state.foot = clampFoot(px);
+    applyFoot();
+    if (keep) remember(FOOT_KEY, String(state.foot));
+  }
+
+  function makeFootDivider() {
+    const handle = $("foot-divider");
+    let drag = null;
+    handle.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      drag = { y: e.clientY, foot: $("foot").offsetHeight };
+      handle.setPointerCapture(e.pointerId);
+      handle.classList.add("dragging");
+      e.preventDefault();
+    });
+    handle.addEventListener("pointermove", (e) => {
+      if (drag) setFoot(drag.foot + drag.y - e.clientY, false);  // up: taller
+    });
+    const end = () => {
+      if (!drag) return;
+      drag = null;
+      handle.classList.remove("dragging");
+      if (state.foot !== null) remember(FOOT_KEY, String(state.foot));  // a click without a move keeps the default
+    };
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
+    handle.addEventListener("lostpointercapture", end);
+    handle.addEventListener("keydown", (e) => {
+      const step = { ArrowUp: KEY_STEP, ArrowDown: -KEY_STEP, Home: Infinity, End: -Infinity }[e.key];
+      if (!step) return;
+      e.preventDefault();
+      setFoot($("foot").offsetHeight + step, true);  // Home: tallest, End: one line
+    });
+    handle.addEventListener("dblclick", () => {  // back to its natural height
+      state.foot = null;
+      applyFoot();
+      remember(FOOT_KEY, "");
+    });
+    window.addEventListener("resize", applyFoot);
+    state.foot = storedFoot();
+    applyFoot();
   }
 
   function makeDivider() {
@@ -461,6 +532,7 @@
 
   state.folded = storedFolds();
   makeDivider();
+  makeFootDivider();
   foldable($("layers-box"), $("layers"), "layers");
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && state.detail) {

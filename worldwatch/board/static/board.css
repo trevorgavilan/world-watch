@@ -102,7 +102,13 @@ h2 { font-size: 13px; margin: 0 0 6px; color: var(--dim); font-weight: 600; text
 }
 .empty { color: var(--dim); }
 
-.foot { padding: 6px 16px; border-top: 1px solid var(--line); color: var(--dim); font-size: 12px; display: flex; gap: 16px; flex-wrap: wrap; }
+/* The bottom strip: its own height when dragged (--foot), scrolling inside; the handle above it. */
+.foot {
+  flex: none; height: var(--foot, auto); overflow-y: auto; align-content: flex-start;
+  padding: 6px 16px; color: var(--dim); font-size: 12px; display: flex; gap: 4px 16px; flex-wrap: wrap;
+}
+.divider.across { width: auto; height: 6px; cursor: row-resize; }
+.divider.across::after { inset: -5px 0; }
 .foot p { margin: 0; }
 .foot p.error { color: var(--never); }
 .credits { display: flex; gap: 12px; flex-wrap: wrap; list-style: none; margin: 0; padding: 0; }
@@ -122,6 +128,7 @@ h2 { font-size: 13px; margin: 0 0 6px; color: var(--dim); font-weight: 600; text
   .stage { flex: none; height: 60vh; }
   .bar { flex-wrap: wrap; }
   .divider { display: none; }
+  .foot { height: auto; }
   .side { width: auto; border-top: 1px solid var(--line); overflow: visible; }
   body { height: auto; }
 }

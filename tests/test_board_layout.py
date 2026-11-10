@@ -18,6 +18,8 @@ EXE = find_browser()
 READY = "document.querySelectorAll('#panels .box').length > 0 && document.querySelectorAll('#fresh .dot').length > 0"
 SIDE = "document.querySelector('.side').getBoundingClientRect().width"
 STAGE = "document.querySelector('#stage').getBoundingClientRect().width"  # the map, or the globe
+FOOT = "document.querySelector('#foot').getBoundingClientRect().height"  # the bottom strip: status and credits
+BOARD_H = "document.querySelector('#board').getBoundingClientRect().height"
 # Every policy breach the page causes. globe.gl's own <style> tags are the one known, harmless kind (FINDINGS).
 WATCH_CSP = ("window.__csp = []; document.addEventListener('securitypolicyviolation', "
              "(e) => window.__csp.push(e.effectiveDirective + ' ' + e.blockedURI));")
@@ -55,8 +57,8 @@ class Layout(unittest.TestCase):
     def reload(self):
         self.b.open(self.url, READY)
 
-    def divider_centre(self):
-        return self.b.run("(() => { const r = document.querySelector('#divider').getBoundingClientRect();"
+    def divider_centre(self, which="#divider"):
+        return self.b.run(f"(() => {{ const r = document.querySelector('{which}').getBoundingClientRect();"
                           " return [r.left + r.width / 2, r.top + r.height / 2]; })()")
 
     # -- the source strip --------------------------------------------------------------------------
@@ -182,7 +184,62 @@ class Layout(unittest.TestCase):
         self.b.size(700, 900)
         self.reload()
         self.assertFalse(self.b.run("document.querySelector('#divider').offsetParent !== null"))
+        self.assertFalse(self.b.run("document.querySelector('#foot-divider').offsetParent !== null"))
         self.assertAlmostEqual(self.b.run(SIDE), self.b.run(STAGE), delta=2)
+
+    # -- the bottom strip (Trevor, 10 Nov: "we need to be able to resize the bottom log") ---------------
+
+    def test_dragging_the_bottom_strip_resizes_it_and_survives_a_reload(self):
+        before, board = self.b.run(FOOT), self.b.run(BOARD_H)
+        x, y = self.divider_centre("#foot-divider")
+        self.b.drag(x, y, x, y - 150)
+        self.assertAlmostEqual(self.b.run(FOOT), before + 150, delta=2)
+        self.assertAlmostEqual(self.b.run(BOARD_H), board - 150, delta=2, msg="the map gives the room")
+        self.b.wait_for("Math.abs(document.querySelector('#map canvas').getBoundingClientRect().height - "
+                        "document.querySelector('#stage').getBoundingClientRect().height) < 2", timeout=5)
+        self.reload()
+        self.assertAlmostEqual(self.b.run(FOOT), before + 150, delta=2, msg="the height is remembered")
+        x, y = self.divider_centre("#foot-divider")
+        self.b.drag(x, y, x, y + 400)  # down past its floor: one line, still on screen
+        self.assertAlmostEqual(self.b.run(FOOT), 28, delta=1)
+
+    def test_the_bottom_strip_has_keys_limits_and_a_default(self):
+        natural = self.b.run(FOOT)
+        self.b.run("document.querySelector('#foot-divider').focus()")
+        self.b.key("ArrowUp", "ArrowUp", 38)
+        self.assertAlmostEqual(self.b.run(FOOT), natural + 20, delta=1)
+        self.assertEqual(self.b.run("Number(document.querySelector('#foot-divider').getAttribute('aria-valuenow'))"),
+                         round(self.b.run(FOOT)))
+        self.b.key("Home", "Home", 36)
+        self.assertAlmostEqual(self.b.run(BOARD_H), 200, delta=1, msg="the map and lists keep their floor")
+        self.b.key("End", "End", 35)
+        self.assertAlmostEqual(self.b.run(FOOT), 28, delta=1)
+        self.assertTrue(self.b.run("(() => { const f = document.querySelector('#foot');"
+                                   " return f.scrollHeight > f.clientHeight && getComputedStyle(f).overflowY === 'auto'; })()"),
+                        "a short strip scrolls")
+        x, y = self.divider_centre("#foot-divider")
+        self.b.mouse("mousePressed", x, y)
+        self.b.mouse("mouseReleased", x, y, buttons=0)
+        self.b.mouse("mousePressed", x, y)
+        self.b.run("document.querySelector('#foot-divider').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))")
+        self.b.mouse("mouseReleased", x, y, buttons=0)
+        self.assertAlmostEqual(self.b.run(FOOT), natural, delta=1, msg="a double-click gives the default back")
+        self.assertEqual(self.b.run("localStorage.getItem('ww.board.foot')"), "")
+
+    def test_a_smaller_window_never_hides_the_map_under_the_strip(self):
+        self.b.run("document.querySelector('#foot-divider').focus()")
+        self.b.key("Home", "Home", 36)
+        self.b.size(1280, 500)
+        self.b.wait_for(f"{BOARD_H} >= 199", timeout=5)
+        self.assertGreaterEqual(self.b.run(FOOT), 28)
+
+    def test_junk_in_storage_never_breaks_the_strip(self):
+        for foot in ("-5000", "99999", "abc", "1e9", "NaN"):
+            with self.subTest(foot=foot):
+                self.b.run(f"localStorage.setItem('ww.board.foot', {json.dumps(foot)})")
+                self.reload()
+                self.assertGreaterEqual(self.b.run(FOOT), 28, foot)
+                self.assertGreaterEqual(self.b.run(BOARD_H), 199, foot)
 
     # -- folding lists -----------------------------------------------------------------------------
 
