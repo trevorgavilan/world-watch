@@ -61,7 +61,8 @@ def _fetch_all(collector: Collector, fetcher, last_ok: datetime | None, now: dat
     """Every URL or nothing: the mark moves only then. A page may name more pages (follow)."""
     by_id = {}
     queue = deque(collector.fetch_urls(last_ok, now))
-    fetched = 0
+    fetched = answered = 0
+    failure = None
     while queue:
         url = queue.popleft()
         fetched += 1
@@ -71,13 +72,18 @@ def _fetch_all(collector: Collector, fetcher, last_ok: datetime | None, now: dat
             payload = fetcher.get(url)
             parsed = collector.parse(payload, now)
         except (FetchError, ParseError) as err:
-            if fetched == 1 or not collector.follow_optional or isinstance(err, RateLimited):
+            first_counts = fetched == 1 and not collector.each_optional
+            if first_counts or not collector.follow_optional or isinstance(err, RateLimited):
                 raise
             log.warning("%s: skipped %s: %s", collector.source, url, err)
+            failure = err
             continue
+        answered += 1
         by_id.update((item.id, item) for item in parsed)
         if collector.follow:
             queue.extend(collector.follow(payload, url, last_ok, now))
+    if failure is not None and answered == 0:  # each_optional, and not one URL answered
+        raise failure
     return list(by_id.values())
 
 

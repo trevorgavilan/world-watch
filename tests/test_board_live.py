@@ -21,7 +21,7 @@ from worldwatch.store import Store
 
 EXE = find_browser()
 NOW = datetime(2026, 11, 9, 23, 0, tzinfo=timezone.utc)
-N_STREAMS = len(L.CAMS) + len(L.NEWS) + 1  # the hostile-titled stream has a good link: it shows, as text
+N_STREAMS = len(L.VIDEOS) + len(L.CHANNELS) + 1  # the hostile-titled stream has a good link: it shows, as text
 SANDBOX = "allow-scripts allow-same-origin allow-presentation allow-popups allow-popups-to-escape-sandbox"
 BLOCKED = ["*youtube-nocookie.com*", "*youtube.com*", "*ytimg.com*", "*googlevideo.com*", "*google.com*"]
 READY = ("window.WWViewer && WWViewer.current && WWViewer.current.state.entries.length > 0 && "
@@ -34,7 +34,7 @@ FRAMES = "[...document.querySelectorAll('iframe')].map((f) => ({src: f.src, sand
 def live_store():
     path = temp_dir() / "worldwatch.sqlite3"
     store = Store(path)
-    for s in L.CAMS:
+    for s in L.VIDEOS:
         store.save_items(L.CAMS_COLLECTOR.parse(fixture(f"youtube/oembed_{s.video}_2026-11-09.json"), NOW))
     store.save_items(L.list_news(None, NOW))
     store.save_items(firms.MIDEAST_COLLECTOR.parse(
@@ -151,7 +151,8 @@ class Viewer(LiveCase):
         self.click("live-next")  # away from the first cam, so the click has something to change
         self.click("go-mideast")
         self.b.run("new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))")
-        mark = self.b.run("WWMap.current.marks().find((m) => m.layer === 'live-cams' && m.kind === 'pin')")
+        mark = self.b.run("WWMap.current.marks().find((m) => m.layer === 'live-cams' && m.kind === 'pin' "
+                          "&& m.label === 'LIVE')")
         self.assertIsNotNone(mark)
         self.assertEqual(mark["label"], "LIVE")
         x, y = self.b.run("(() => { const r = document.querySelector('#map canvas').getBoundingClientRect();"
@@ -159,9 +160,19 @@ class Viewer(LiveCase):
         self.b.mouse("mouseMoved", x, y, buttons=0)
         self.b.mouse("mousePressed", x, y)
         self.b.mouse("mouseReleased", x, y, buttons=0)
-        cams = {self.ids[s.name] for s in L.CAMS}
+        cams = {self.ids[s.name] for s in L.VIDEOS if s.lat is not None}
         self.assertIn(self.b.run("WWViewer.current.state.current"), cams)
         self.assertEqual(self.b.run("document.querySelector('#picked .title').textContent"), self.current_title())
+
+    def test_a_not_verified_stream_says_so_and_has_an_amber_pin(self):
+        self.b.run(f"WWViewer.current.show({json.dumps(self.ids['Nablus Live'])})")
+        self.assertIn("Live cam · NOT VERIFIED", self.b.run("document.querySelector('#live-meta').textContent"))
+        labels = {m["label"] for m in self.b.run("WWMap.current.marks()") if m["layer"] == "live-cams" and m["kind"] == "pin"}
+        self.assertEqual(labels, {"LIVE", "LIVE?"})
+        titles = self.b.run("WWViewer.current.state.entries.map((e) => e.title)")
+        last_official = max(titles.index(s.name) for s in L.VIDEOS + L.CHANNELS if not s.caution)
+        first_other = min(titles.index(s.name) for s in L.VIDEOS + L.CHANNELS if s.caution)
+        self.assertLess(last_official, first_other)  # official streams first
 
     def test_the_streams_are_not_shown_again_as_lists(self):
         headings = self.b.run("[...document.querySelectorAll('#panels h2')].map((h) => h.textContent)")
@@ -202,7 +213,7 @@ class Console(LiveCase):
         self.assertEqual(len({t["id"] for t in tiles}), 4)
         for t in tiles:
             self.assertEqual(t["options"], N_STREAMS)
-            self.assertEqual(t["groups"], ["Cams", "News"])
+            self.assertEqual(t["groups"], ["Cams", "News", "Not verified"])
         for f in self.frames():
             self.assertEqual(f["sandbox"], SANDBOX)
             self.assertEqual(f["referrer"], "strict-origin")
@@ -237,6 +248,32 @@ class Console(LiveCase):
         for bad in ("js", "evil host", "suffix"):
             self.assertNotIn(bad, texts)
         self.assertFalse(self.b.run("!!document.querySelector('#grid img, #grid script')"))
+
+    def test_a_click_on_a_tile_keeps_every_player(self):  # code review: the grid's own click rebuilt them all
+        self.b.run("document.querySelectorAll('#grid iframe').forEach((f) => { f.__kept = true; })")
+        x, y = self.b.run("(() => { const r = document.querySelectorAll('#grid select')[1].getBoundingClientRect();"
+                          " return [r.left + r.width / 2, r.top + r.height / 2]; })()")
+        self.b.mouse("mousePressed", x, y)
+        self.b.mouse("mouseReleased", x, y, buttons=0)
+        self.b.key("Escape", "Escape", 27)
+        self.assertTrue(self.b.run("[...document.querySelectorAll('#grid iframe')].every((f) => f.__kept === true)"))
+        self.assertEqual(len(self.tiles()), 4)
+
+    def test_a_malformed_address_still_draws_the_grid(self):  # code review: it retried forever
+        self.open("#%E0%A4%A")
+        self.assertEqual(len(self.tiles()), 4)
+        self.assertEqual(self.b.run("document.querySelector('#status').textContent"), "")
+
+    def test_a_stream_that_leaves_the_list_is_not_misnamed(self):  # code review
+        gone = self.tiles()[0]["id"]
+        self.b.run("(() => { const real = window.fetch; window.fetch = async (u, o) => { const r = await real(u, o);"
+                   " const b = await r.json(); b.entries = b.entries.filter((e) => e.id !== " + json.dumps(gone) + ");"
+                   " return new Response(JSON.stringify(b), { status: 200 }); }; })()")
+        self.b.run("document.querySelector('#grid iframe').__kept = true")
+        self.b.run("WWLive.refresh()")
+        self.assertEqual(self.b.run("document.querySelector('#grid select').selectedOptions[0].textContent"),
+                         "(no longer listed)")
+        self.assertTrue(self.b.run("document.querySelector('#grid iframe').__kept === true"))
 
     def test_a_list_refresh_keeps_the_frames(self):
         self.b.run("document.querySelector('#grid iframe').__kept = true")

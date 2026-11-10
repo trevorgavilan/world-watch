@@ -22,7 +22,7 @@ def oembed(video):
 
 def saved_answers():
     """{check URL: the saved real oEmbed answer} for every cam on the list."""
-    return {s.check_url: oembed(s.video) for s in L.CAMS}
+    return {s.check_url: oembed(s.video) for s in L.VIDEOS}
 
 
 def stored(store):
@@ -32,13 +32,13 @@ def stored(store):
 class Cams(unittest.TestCase):
     def setUp(self):
         self.items = {}
-        for s in L.CAMS:
+        for s in L.VIDEOS:
             (item,) = L.CAMS_COLLECTOR.parse(oembed(s.video), NOW)
             self.items[item.title] = item
 
-    def test_every_cam_has_a_saved_answer_and_matches_it(self):
-        self.assertEqual(len(list((FIXTURES / "youtube").iterdir())), len(L.CAMS))
-        self.assertEqual(set(self.items), {s.name for s in L.CAMS})
+    def test_every_video_has_a_saved_answer_and_matches_it(self):
+        self.assertEqual(len(list((FIXTURES / "youtube").iterdir())), len(L.VIDEOS))
+        self.assertEqual(set(self.items), {s.name for s in L.VIDEOS})
 
     def test_a_cam_is_a_fixed_video_at_its_place(self):
         main = self.items["Western Wall 1 · Main Plaza"]
@@ -59,7 +59,7 @@ class Cams(unittest.TestCase):
 
     def test_check_urls_are_youtube_oembed(self):
         urls = L.check_urls(None, NOW)
-        self.assertEqual(len(urls), len(L.CAMS))
+        self.assertEqual(len(urls), len(L.VIDEOS))
         for url in urls:
             self.assertRegex(url, r"^https://www\.youtube\.com/oembed\?format=json&url="
                                   r"https%3A%2F%2Fwww\.youtube\.com%2Fwatch%3Fv%3D[A-Za-z0-9_-]{11}$")
@@ -81,7 +81,7 @@ class News(unittest.TestCase):
         self.items = {i.title: i for i in L.list_news(None, NOW)}
 
     def test_every_channel_is_its_current_live_stream_with_no_place(self):
-        self.assertEqual(len(self.items), len(L.NEWS))
+        self.assertEqual(len(self.items), len(L.CHANNELS))
         aje = self.items["Al Jazeera English"]
         self.assertEqual(aje.url, "https://www.youtube.com/channel/UCNye-wNBqNL5ZzHSJj3l8Bg/live")
         self.assertEqual(aje.severity, "news")
@@ -98,6 +98,34 @@ class News(unittest.TestCase):
     def test_the_bank_and_the_strip_have_their_broadcasters(self):
         self.assertIn("Ramallah, West Bank", self.items["Palestine TV"].summary)
         self.assertIn("Al Jazeera Arabic", self.items)
+        self.assertIn("Bethlehem, West Bank", self.items["Hala Bethlehem TV"].summary)
+        self.assertIn("covering Gaza", self.items["Al Ghad"].summary)
+
+
+class NotVerified(unittest.TestCase):
+    """Trevor (2026-11-09): any source, but the ones we can't vouch for say so wherever they show."""
+
+    def items(self):
+        cams = [L.CAMS_COLLECTOR.parse(oembed(s.video), NOW)[0] for s in L.VIDEOS]
+        return {i.title: i for i in cams + L.list_news(None, NOW)}
+
+    def test_official_and_not_verified_are_told_apart(self):
+        items = self.items()
+        official = {s.name for s in L.VIDEOS + L.CHANNELS if not s.caution}
+        self.assertEqual(len(official), 4 + 13)
+        for title, item in items.items():
+            if title in official:
+                self.assertIn(item.severity, ("cam", "news"))
+                self.assertNotIn("Not verified", item.summary)
+            else:
+                self.assertTrue(item.severity.endswith(" · not verified"), title)
+                self.assertIn("Not verified:", item.summary)
+
+    def test_a_not_verified_place_is_still_a_pin(self):
+        nablus = self.items()["Nablus Live"]
+        self.assertAlmostEqual(nablus.lat, 32.2211, places=3)
+        self.assertEqual(nablus.severity, "cam · not verified")
+        self.assertIsNone(self.items()["Middle East multi-cam (Intel Cams | OSINT)"].lat)  # a grid has no one place
 
     def test_the_run_lists_them_without_fetching(self):
         store = Store(temp_dir() / "w.sqlite3")
@@ -105,23 +133,26 @@ class News(unittest.TestCase):
         result = run_source(store, L.NEWS_COLLECTOR, fetcher, NOW)
         self.assertTrue(result.ok)
         self.assertEqual(fetcher.calls, [])
-        self.assertEqual(len(stored(store)), len(L.NEWS))
+        self.assertEqual(len(stored(store)), len(L.CHANNELS))
         store.close()
 
 
 class TheList(unittest.TestCase):
     def test_the_list_is_checked_when_loaded(self):
         good = dict(key="k", name="n", owner="o", home="h")
-        bad = [dict(video="LMHUcDktP-w"),  # a cam with no place
-               dict(channel="UCNye-wNBqNL5ZzHSJj3l8Bg", lat=1.0, lon=2.0),  # news with a place
-               dict(video="LMHUcDktP-w", channel="UCNye-wNBqNL5ZzHSJj3l8Bg", lat=1.0, lon=2.0),  # both
-               dict(),  # neither
-               dict(video="javascript:", lat=1.0, lon=2.0), dict(channel="UC<script>")]
+        bad = [dict(kind="cam", video="LMHUcDktP-w"),  # an official cam with no place
+               dict(kind="cam", channel="UCNye-wNBqNL5ZzHSJj3l8Bg", lat=1.0, lon=2.0, caution="x"),  # a cam that isn't fixed
+               dict(kind="news", channel="UCNye-wNBqNL5ZzHSJj3l8Bg", lat=1.0, lon=2.0),  # news with a place
+               dict(kind="cam", video="LMHUcDktP-w", lat=1.0),  # half a place
+               dict(kind="news", video="LMHUcDktP-w", channel="UCNye-wNBqNL5ZzHSJj3l8Bg"),  # both
+               dict(kind="news"),  # neither
+               dict(kind="radio", channel="UCNye-wNBqNL5ZzHSJj3l8Bg"),
+               dict(kind="cam", video="javascript:", lat=1.0, lon=2.0), dict(kind="news", channel="UC<script>")]
         for extra in bad:
             with self.subTest(extra=extra), self.assertRaises(ValueError):
                 L.Stream(**good, **extra)
-        news = L.Stream(**good, channel="UCNye-wNBqNL5ZzHSJj3l8Bg")
-        cam = L.Stream(**good, video="LMHUcDktP-w", lat=1.0, lon=2.0)
+        news = L.Stream(**good, kind="news", channel="UCNye-wNBqNL5ZzHSJj3l8Bg")
+        cam = L.Stream(**good, kind="cam", video="LMHUcDktP-w", lat=1.0, lon=2.0)
         for cams, channels in (((), (news, news)), ((news,), ()), ((), (cam,))):
             with self.assertRaises(ValueError):
                 L._checked_list(cams, channels)
@@ -151,17 +182,23 @@ class OneCamGone(unittest.TestCase):
     def test_all_answer(self):
         result, titles = self.run_with([])
         self.assertTrue(result.ok)
-        self.assertEqual(len(titles), len(L.CAMS))
+        self.assertEqual(len(titles), len(L.VIDEOS))
 
     def test_one_gone_is_skipped(self):
-        gone = next(s for s in L.CAMS if s.key == "kotel-3")
+        gone = next(s for s in L.VIDEOS if s.key == "kotel-3")
         result, titles = self.run_with([gone.check_url])
         self.assertTrue(result.ok)
         self.assertNotIn(gone.name, titles)
-        self.assertEqual(len(titles), len(L.CAMS) - 1)
+        self.assertEqual(len(titles), len(L.VIDEOS) - 1)
 
-    def test_the_first_check_failing_fails_the_run(self):
-        result, titles = self.run_with([L.CAMS[0].check_url])
+    def test_the_first_check_failing_skips_only_it(self):  # code review: one ended stream sank them all
+        result, titles = self.run_with([L.VIDEOS[0].check_url])
+        self.assertTrue(result.ok)
+        self.assertEqual(len(titles), len(L.VIDEOS) - 1)
+        self.assertNotIn(L.VIDEOS[0].name, titles)
+
+    def test_no_check_answering_fails_the_run(self):
+        result, titles = self.run_with([s.check_url for s in L.VIDEOS])
         self.assertFalse(result.ok)
         self.assertEqual(titles, set())
 
@@ -172,7 +209,7 @@ class OneCamGone(unittest.TestCase):
         n = len(stored(store))
         store.close()
         self.assertTrue(result.ok, result.error)
-        self.assertGreaterEqual(n, len(L.CAMS) - 1)  # a cam may end on any day
+        self.assertGreaterEqual(n, len(L.VIDEOS) - 3)  # a re-stream may end on any day
 
 
 class FirmsMideast(unittest.TestCase):

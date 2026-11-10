@@ -64,8 +64,10 @@ window.WWPins = (() => {
     fires: (p) => ({ shape: "speck", color: "#ff8c2a", r: 1.5 + p.weight * 2.5, pin: false, label: null }),
     // Heat in the Middle East: a redder speck than Mexico's fires; FIRMS can't tell a fire from a strike.
     "heat-mideast": (p) => ({ shape: "speck", color: "#ff5a3c", r: 1.5 + p.weight * 2.5, pin: false, label: null }),
-    // A live cam: a pinned square, labelled LIVE; a click puts it in the viewer.
-    "live-cams": () => ({ shape: "square", color: "#ff3b5c", r: 5, pin: true, label: "LIVE" }),
+    // A live cam: a pinned square, labelled LIVE; a click puts it in the viewer. Amber "LIVE?": not verified.
+    "live-cams": (p) => (p.severity === "cam"
+      ? { shape: "square", color: "#ff3b5c", r: 5, pin: true, label: "LIVE" }
+      : { shape: "square", color: "#d29922", r: 5, pin: true, label: "LIVE?" }),
   };
 
   function style(layerId, point) {

@@ -297,8 +297,8 @@
   }
 
   function liveMeta(e) {
-    const cam = window.WWPlayer.isCam(e);  // a cam's link was checked; a news channel is only listed
-    return (cam ? "Live cam" : "Live news") + " · " + window.WWPlayer.owner(e) + " · " + (cam ? "checked " : "listed ") +
+    const checked = e.source === LIVE_SOURCE;  // a fixed video was checked; a channel is only listed
+    return window.WWPlayer.kindText(e) + " · " + window.WWPlayer.owner(e) + " · " + (checked ? "checked " : "listed ") +
       when(e.fetched_at, false) + " (" + ago(e.fetched_at) + ")";
   }
 

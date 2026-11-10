@@ -10,6 +10,7 @@
   const P = window.WWPlayer;
   const REFRESH_MS = 10 * 60 * 1000;
   const PANELS = ["live-cams", "live-news"];
+  const LAYOUT_BUTTONS = ".seg button[data-layout]";  // the buttons only: the grid carries the layout too
   const LAYOUTS = [1, 4, 6, 9];
   const LAYOUT_KEY = "ww.live.layout";
   const TILES_KEY = "ww.live.tiles";
@@ -55,7 +56,12 @@
   }
 
   function wanted() {
-    const raw = decodeURIComponent(location.hash.slice(1));
+    let raw = "";
+    try {
+      raw = decodeURIComponent(location.hash.slice(1));
+    } catch (_) {
+      return null;  // a malformed address asks for nothing
+    }
     return /^[0-9a-f]{1,80}$/.test(raw) ? raw : null;
   }
 
@@ -84,12 +90,21 @@
       a.rel = "noopener noreferrer";
       a.target = "_blank";
     }
-    cap.append(a, el("span", " · " + (P.isCam(e) ? "Live cam" : "Live news") + " · " + P.owner(e), "who"));
+    cap.append(a, el("span", " · " + P.kindText(e) + " · " + P.owner(e), "who"));
   }
 
   function options(select, current) {
-    const groups = [["Cams", v.entries.filter(P.isCam)], ["News", v.entries.filter((e) => !P.isCam(e))]];
+    const official = v.entries.filter(P.isVerified);
+    const groups = [["Cams", official.filter(P.isCam)], ["News", official.filter((e) => !P.isCam(e))],
+      ["Not verified", v.entries.filter((e) => !P.isVerified(e))]];
     select.replaceChildren();
+    if (current && !byId(current)) {  // still playing, but no longer on the list: say so, don't name another
+      const gone = el("option", "(no longer listed)");
+      gone.value = current;
+      gone.selected = true;
+      gone.disabled = true;
+      select.append(gone);
+    }
     for (const [label, list] of groups) {
       if (!list.length) continue;
       const group = document.createElement("optgroup");
@@ -136,7 +151,7 @@
     const ids = fill(v.layout);
     $("grid").dataset.layout = String(v.layout);
     $("grid").replaceChildren(...ids.map((id, n) => tile(id, n)));
-    for (const b of document.querySelectorAll("[data-layout]")) {
+    for (const b of document.querySelectorAll(LAYOUT_BUTTONS)) {
       b.setAttribute("aria-pressed", String(Number(b.dataset.layout) === v.layout));
     }
     if (!ids.length) $("grid").append(el("p", "No stream has been checked yet: run World Watch once.", "empty"));
@@ -170,7 +185,7 @@
     }
   }
 
-  for (const b of document.querySelectorAll("[data-layout]")) {
+  for (const b of document.querySelectorAll(LAYOUT_BUTTONS)) {
     b.addEventListener("click", () => {
       v.layout = Number(b.dataset.layout);
       remember(LAYOUT_KEY, String(v.layout));

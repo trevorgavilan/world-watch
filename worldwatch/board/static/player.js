@@ -46,16 +46,30 @@ window.WWPlayer = (() => {
     return VIDEO.test(url) || CHANNEL.test(url) ? url : null;
   }
 
+  /* The kind is the item's severity: "cam" or "news", with " · not verified" when we can't vouch for it. */
   function isCam(entry) {
-    return entry && entry.severity === "cam";
+    return !!entry && typeof entry.severity === "string" && entry.severity.startsWith("cam");
   }
 
-  /* Cams first, then the news channels; each by name. Streams with no playable link are left out. */
+  function isVerified(entry) {
+    return !!entry && (entry.severity === "cam" || entry.severity === "news");
+  }
+
+  function kindText(entry) {
+    return (isCam(entry) ? "Live cam" : "Live news") + (isVerified(entry) ? "" : " · NOT VERIFIED");
+  }
+
+  /* Official streams first (cams, then news), then the not verified ones; each by name. Streams with no
+     playable link are left out. */
+  function rank(e) {
+    return (isVerified(e) ? 0 : 2) + (isCam(e) ? 0 : 1);
+  }
+
   function order(entries) {
     return (Array.isArray(entries) ? entries : [])
       .filter((e) => e && typeof e.id === "string" && embedUrl(e, false))
       .slice()
-      .sort((a, b) => (isCam(a) === isCam(b) ? String(a.title).localeCompare(String(b.title)) : isCam(a) ? -1 : 1));
+      .sort((a, b) => rank(a) - rank(b) || String(a.title).localeCompare(String(b.title)));
   }
 
   /* "Live cam · Western Wall Heritage Foundation · Jerusalem." — the owner line is the summary's head. */
@@ -65,5 +79,5 @@ window.WWPlayer = (() => {
     return cut > 0 ? summary.slice(0, cut) : summary.replace(/\.$/, "");
   }
 
-  return { ORIGIN, SANDBOX, embedUrl, watchUrl, frame, isCam, order, owner };
+  return { ORIGIN, SANDBOX, embedUrl, watchUrl, frame, isCam, isVerified, kindText, order, owner };
 })();
