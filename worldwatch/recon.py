@@ -44,6 +44,12 @@ CREDITS = [
     ("noaa-swpc", "Space Weather Prediction Center, NOAA", "https://www.spaceweather.gov/"),
     ("smn-cdmx", "Servicio Meteorológico Nacional (SMN) / CONAGUA", "https://smn.conagua.gob.mx/"),
     ("mideast-", "Live streams: each owner's own channel, played by YouTube", "https://www.youtube.com/t/terms"),
+    ("banxico-", "Fuente: Banco de México (SIE)", "https://www.banxico.org.mx/SieInternet/"),
+    ("fred", "This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.",
+     "https://fred.stlouisfed.org/docs/api/terms_of_use.html"),
+    ("coingecko", "Powered by CoinGecko", "https://www.coingecko.com/"),
+    ("twelvedata", "Market data by Twelve Data (delayed)", "https://twelvedata.com/"),
+    ("fed-press", "Board of Governors of the Federal Reserve System (public domain)", "https://www.federalreserve.gov/"),
 ]
 
 

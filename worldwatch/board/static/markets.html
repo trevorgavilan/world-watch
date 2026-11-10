@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Markets · World Watch</title>
+<link rel="stylesheet" href="/static/markets.css">
+<script src="/static/markets.js" defer></script>
+</head>
+<body>
+<header class="bar">
+  <h1>Markets <span class="es">· Mercados</span></h1>
+  <p id="updated" class="updated"></p>
+  <a class="back" href="/">Back to the Board</a>
+</header>
+<p id="disclaimer" class="disclaimer" role="note"></p>
+<main class="page">
+  <div class="main">
+    <section id="alerts-box" class="box alert" aria-label="Peso alerts" hidden>
+      <h2>Peso — your lines crossed · tus líneas cruzadas</h2>
+      <ul id="alerts" class="list"></ul>
+    </section>
+    <section class="box" aria-label="What moved">
+      <h2>What moved · Qué se movió</h2>
+      <p class="hint">Worked out by World Watch from the numbers below: the biggest changes, by per cent, among
+        numbers from the last few days. Why they moved is in the official statements, at the side.</p>
+      <ol id="moves" class="moves"></ol>
+    </section>
+    <div id="groups"></div>
+  </div>
+  <aside class="side">
+    <section class="box" aria-label="Your peso lines">
+      <h2>Your lines · Tus líneas</h2>
+      <ul id="lines" class="list"></ul>
+      <p class="hint">Edit <code>data\markets.txt</code> to change them: <code>peso above 19.50</code>,
+        <code>peso below 17.80</code>, <code>watch NVDA</code>.</p>
+      <ul id="problems" class="list problems"></ul>
+    </section>
+    <section class="box" aria-label="Calendar">
+      <h2>Coming up · Próximamente</h2>
+      <ul id="calendar" class="list"></ul>
+    </section>
+    <section class="box" aria-label="Why it moved">
+      <h2>Why it moved — official statements · Comunicados oficiales</h2>
+      <ul id="statements" class="list"></ul>
+    </section>
+    <section class="box" aria-label="Practice portfolio">
+      <h2>Practice portfolio · Portafolio de práctica</h2>
+      <p class="hint">Play money only: no broker, no real orders, no money moves. Trade with
+        <code>python -m worldwatch paper buy AMX 10</code>.</p>
+      <div id="paper"></div>
+    </section>
+    <section class="box" aria-label="Glossary">
+      <h2>Glossary · Glosario</h2>
+      <div id="glossary"></div>
+    </section>
+  </aside>
+</main>
+<footer class="foot">
+  <p id="status" role="status"></p>
+  <ul class="credits">
+    <li>This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.
+      <a href="https://fred.stlouisfed.org/docs/api/terms_of_use.html" rel="noopener noreferrer" target="_blank">Terms</a></li>
+    <li>Index series © S&amp;P Dow Jones Indices LLC, Nasdaq, Inc. and Cboe; personal use.</li>
+    <li>Fuente: Banco de México, <a href="https://www.banxico.org.mx/SieInternet/" rel="noopener noreferrer" target="_blank">SIE</a>.</li>
+    <li><a href="https://www.coingecko.com/" rel="noopener noreferrer" target="_blank">Powered by CoinGecko</a></li>
+    <li>Market data by <a href="https://twelvedata.com/" rel="noopener noreferrer" target="_blank">Twelve Data</a> (delayed).</li>
+    <li>Statements: Board of Governors of the Federal Reserve System.</li>
+  </ul>
+</footer>
+</body>
+</html>

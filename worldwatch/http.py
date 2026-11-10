@@ -19,8 +19,9 @@ CHUNK_BYTES = 64 * 1024
 # GDELT asks for at most one request every 5 seconds, NIST for six seconds between NVD requests;
 # OSV's bucket states no limit, so a second between record files. Leave a margin.
 # YouTube throttles quick runs of requests (its channel feeds answered 404/500, 2026-11-09): oEmbed is spaced.
+# Twelve Data's free plan allows 8 credits a minute: one request of up to 8 symbols, then a minute's gap.
 HOST_MIN_GAP_S = {"api.gdeltproject.org": 6.0, "services.nvd.nist.gov": 6.5, "storage.googleapis.com": 1.0,
-                  "www.youtube.com": 4.0}
+                  "www.youtube.com": 4.0, "api.twelvedata.com": 62.0, "api.stlouisfed.org": 1.0}
 
 
 class FetchError(Exception):
@@ -54,10 +55,11 @@ class Fetcher:
                 self._sleep(remaining)
         self._last_by_host[host] = self._clock()
 
-    def get(self, url: str) -> bytes:
+    def get(self, url: str, headers: dict[str, str] | None = None) -> bytes:
+        """headers: a source's own (an API key in Bmx-Token or Authorization); they never reach a log."""
         host = urlsplit(url).hostname or ""
         self._wait_for_host(host)
-        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        request = urllib.request.Request(url, headers={**(headers or {}), "User-Agent": USER_AGENT})
         try:
             with urllib.request.urlopen(request, timeout=TIMEOUT_S) as response:
                 return _read_capped(response, host)

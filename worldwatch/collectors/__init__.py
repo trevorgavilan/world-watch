@@ -50,15 +50,22 @@ class Collector:
     decode: Callable[[bytes, str], object] | None = None  # (payload, source) -> data; JSON when None
     # (store, now) -> Items worked out from what is already stored, instead of fetching (the watchlist).
     derive: Callable[[object, datetime], list[Item]] | None = None
+    # () -> the source's own request headers (an API key); raises keys.MissingKey while the key is not set.
+    headers: Callable[[], dict[str, str]] | None = None
+    parse_with_url: bool = False  # parse_records(data, fetched_at, url): the answer doesn't say what it is (FRED)
+
+    def request_headers(self) -> dict[str, str] | None:
+        return self.headers() if self.headers else None
 
     def fetch_urls(self, last_ok: datetime | None, now: datetime) -> list[str]:
         return list(self.url_for(last_ok, now)) if self.url_for else [self.url]
 
-    def parse(self, payload: bytes, fetched_at: datetime) -> list[Item]:
+    def parse(self, payload: bytes, fetched_at: datetime, url: str | None = None) -> list[Item]:
         data = (self.decode or decode_json)(payload, self.source)
         items: list[Item] = []
         skipped = 0
-        for build in self.parse_records(data, fetched_at):
+        builds = self.parse_records(data, fetched_at, url) if self.parse_with_url else self.parse_records(data, fetched_at)
+        for build in builds:
             try:
                 items.append(build())
             except Exception as err:  # noqa: BLE001 — one odd record (an overflowing time…) never sinks the batch
@@ -107,14 +114,19 @@ def all_collectors(base: Path | None = None) -> list[Collector]:
     """The sources in the run. GDELT is parked (D-16): it refused most calls; its adapter and
     tests stay, and it returns by adding `*gdelt.COLLECTORS` here. The status pages (Task 3b) feed the same alerts. Task 4 adds the hazards and Mexico sources, and
     the near-CDMX quake alerts worked out from USGS and the SSN. The Middle East watch adds the live streams
-    and FIRMS heat detections in the region. The watchlist alerts come first,
+    and FIRMS heat detections in the region. Task 5 adds the markets sources (information only)
+    and the peso alerts worked out from Trevor's lines. The watchlist alerts come first,
     so they lead the Board (the runner still derives them after the fetches); their list lives in
     `<base>/watchlist.txt` (D-20)."""
-    from . import (cisa_kev, eonet, epss, firms, gdacs, live_streams, my_stack, near_cdmx, nvd, osv, smn, ssn,
-                   status_pages, swpc, usgs)
+    from . import (banxico, cisa_kev, coingecko, eonet, epss, fed_press, firms, fred, gdacs, live_streams, my_stack,
+                   near_cdmx, nvd, osv, peso_alert, smn, ssn, status_pages, swpc, twelvedata, usgs)
 
-    watchlist = (base or Path(__file__).resolve().parents[2] / "data") / "watchlist.txt"
-    return [my_stack.collector(watchlist), near_cdmx.COLLECTOR, usgs.COLLECTOR, ssn.COLLECTOR, cisa_kev.COLLECTOR,
+    data = base or Path(__file__).resolve().parents[2] / "data"
+    watchlist = data / "watchlist.txt"
+    markets = data / "markets.txt"  # Task 5: Trevor's peso lines and tickers
+    return [my_stack.collector(watchlist), peso_alert.collector(markets), near_cdmx.COLLECTOR, usgs.COLLECTOR, ssn.COLLECTOR, cisa_kev.COLLECTOR,
             nvd.COLLECTOR, osv.COLLECTOR, epss.COLLECTOR, *status_pages.COLLECTORS,
             gdacs.COLLECTOR, eonet.COLLECTOR, firms.COLLECTOR, swpc.COLLECTOR, smn.COLLECTOR,
-            *live_streams.COLLECTORS, firms.MIDEAST_COLLECTOR]
+            *live_streams.COLLECTORS, firms.MIDEAST_COLLECTOR,
+            *banxico.COLLECTORS, fred.COLLECTOR, fred.CALENDAR, coingecko.COLLECTOR, twelvedata.collector(markets),
+            fed_press.COLLECTOR]

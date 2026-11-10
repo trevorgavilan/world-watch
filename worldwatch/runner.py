@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 from .collectors import Collector, ParseError
 from .http import FetchError, RateLimited
 from .item import iso_utc, parse_iso_utc
+from .keys import MissingKey, redact
 from .store import Store
 
 log = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ RATE_LIMIT_MAX_S = 6 * 3600
 ERROR_MAX = 500
 MAX_URLS_PER_RUN = 300     # a runaway listing or paging loop stops here
 WAKE_GAP_S = 10 * 60        # a tick that took this much longer than asked: the PC slept
+KEY_RECHECK_S = 30 * 60     # a source waiting for its key looks again this often
 
 
 @dataclass(frozen=True)
@@ -60,6 +62,7 @@ def is_due(store: Store, collector: Collector, now: datetime) -> bool:
 def _fetch_all(collector: Collector, fetcher, last_ok: datetime | None, now: datetime) -> list:
     """Every URL or nothing: the mark moves only then. A page may name more pages (follow)."""
     by_id = {}
+    headers = collector.request_headers()
     queue = deque(collector.fetch_urls(last_ok, now))
     fetched = answered = 0
     failure = None
@@ -69,8 +72,8 @@ def _fetch_all(collector: Collector, fetcher, last_ok: datetime | None, now: dat
         if fetched > MAX_URLS_PER_RUN:
             raise ParseError(f"{collector.source}: more than {MAX_URLS_PER_RUN} URLs in one run")
         try:
-            payload = fetcher.get(url)
-            parsed = collector.parse(payload, now)
+            payload = fetcher.get(url, headers) if headers else fetcher.get(url)
+            parsed = collector.parse(payload, now, url)
         except (FetchError, ParseError) as err:
             first_counts = fetched == 1 and not collector.each_optional
             if first_counts or not collector.follow_optional or isinstance(err, RateLimited):
@@ -97,11 +100,17 @@ def run_source(store: Store, collector: Collector, fetcher, now: datetime) -> Ru
         else:
             items = _fetch_all(collector, fetcher, last_ok, now)
         store.save_items(items)
+    except MissingKey as err:  # waiting for Trevor, not a failing source: no backoff, look again in a while
+        message = str(err)[:ERROR_MAX]
+        log.info("%s: %s", collector.source, message)
+        store.record_run(collector.source, now, datetime.now(timezone.utc), ok=False, n_items=0, error=message,
+                         next_due=iso_utc(now + timedelta(seconds=KEY_RECHECK_S)), fail_count=fails)
+        return RunResult(collector.source, False, 0, message)
     except Exception as err:  # noqa: BLE001 — one broken source must never stop the run
         fails += 1
         rate_limited = isinstance(err, RateLimited)
         expected = isinstance(err, (FetchError, ParseError))
-        message = (str(err) or type(err).__name__)[:ERROR_MAX]
+        message = redact(str(err) or type(err).__name__)[:ERROR_MAX]  # a key in a URL never reaches the store
         if not expected:
             message = f"{type(err).__name__}: {message}"[:ERROR_MAX]
             log.exception("%s: unexpected error", collector.source)

@@ -28,6 +28,9 @@ from .board import server as board_server
 from .collectors import all_collectors
 from .http import Fetcher
 from .item import iso_utc, parse_iso_utc
+from .keys import RedactKeys
+from .markets import paper
+from .markets import rules as market_rules
 from .store import Store
 
 log = logging.getLogger("worldwatch")
@@ -48,6 +51,8 @@ def setup_logging(base: Path) -> None:
     ]
     if sys.stderr is not None:  # pythonw has no console
         handlers.append(logging.StreamHandler())
+    for handler in handlers:
+        handler.addFilter(RedactKeys())  # an API key in a URL or message never reaches the log
     logging.basicConfig(level=logging.INFO, handlers=handlers, force=True,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -257,7 +262,33 @@ def cmd_status(store, collectors, base, args) -> int:
     return 0
 
 
-COMMANDS = {"once": cmd_once, "loop": cmd_loop, "start": cmd_start, "recon": cmd_recon, "status": cmd_status}
+def cmd_paper(store, collectors, base, args) -> int:
+    """The practice portfolio (play money, never a broker): buy, sell, or show."""
+    path = base / "paper.json"
+    try:
+        book = paper.load(path)
+        if args.action in ("buy", "sell"):
+            if not args.name or not args.qty:
+                print(f"usage: python -m worldwatch paper {args.action} <name> <quantity>")
+                return 2
+            book = paper.trade(book, store, args.action, args.name, args.qty, _now(),
+                               market_rules.load(base / "markets.txt").watch)
+            paper.save(path, book)
+            last = book["trades"][-1]
+            print(f"Practice {args.action}: {last['qty']} {last['instrument']} at {last['price']} {last['currency']}"
+                  f" (price from {last['price_at']}). Play money only.")
+        view = paper.summary(book, store, _now())
+    except paper.PaperError as err:
+        print(f"Not done: {err}")
+        return 1
+    print(f"Practice portfolio: {view['total_mxn']} MXN (start {view['start_mxn']}), cash {view['cash_mxn']} MXN")
+    for h in view["holdings"]:
+        print(f"  {h['id']}: {h['qty']} — cost {h['cost_mxn']} MXN, now {h['value_mxn'] or 'no fresh price'}")
+    return 0
+
+
+COMMANDS = {"once": cmd_once, "loop": cmd_loop, "start": cmd_start, "recon": cmd_recon, "status": cmd_status,
+            "paper": cmd_paper}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -272,6 +303,10 @@ def main(argv: list[str] | None = None) -> int:
     rec.add_argument("--open", action="store_true")
     status = sub.add_parser("status")
     status.add_argument("--hours", type=float, default=24.0)
+    practice = sub.add_parser("paper", help="the practice portfolio: play money, never a broker")
+    practice.add_argument("action", choices=["buy", "sell", "show"])
+    practice.add_argument("name", nargs="?")
+    practice.add_argument("qty", nargs="?")
     args = parser.parse_args(argv)
     for stream in (sys.stdout, sys.stderr):  # the Windows console defaults to cp1252; pythonw has neither
         if stream is not None and hasattr(stream, "reconfigure"):
@@ -279,6 +314,7 @@ def main(argv: list[str] | None = None) -> int:
 
     base = home()
     setup_logging(base)
+    market_rules.ensure(base / "markets.txt")
     store = None
     try:
         store = Store(base / "worldwatch.sqlite3")

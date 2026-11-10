@@ -338,8 +338,8 @@ class Wiring(StoreCase):
                     return fixture("osv_BIT-php-2026-109618.json")
                 return answers[host]
 
-        collectors = [c for c in all_collectors(self.dir)  # the quakes, Task 4 and the Middle East watch: own tests
-                      if c.channel != "hazards" and not c.source.startswith("mideast-")]
+        collectors = [c for c in all_collectors(self.dir)  # the quakes, Task 4, the Middle East watch, markets: own tests
+                      if c.channel not in ("hazards", "markets") and not c.source.startswith("mideast-")]
         results = run_once(self.store, collectors, Fake(), REPLAY_NOW)
         self.assertTrue(all(r.ok for r in results), results)
         # Fixed questions only: no URL depends on the watchlist, and my-stack fetched nothing.

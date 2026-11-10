@@ -28,6 +28,7 @@ from typing import Callable
 from ..collectors import Collector
 from ..recon_html import CSP as RECON_CSP
 from ..store import Store
+from ..markets import api as markets_api
 from . import data
 
 log = logging.getLogger(__name__)
@@ -61,12 +62,15 @@ STATIC: dict[str, tuple[Path, str]] = {  # served name -> (file, type); nothing 
     "popup.js": (_HERE / "popup.js", "text/javascript; charset=utf-8"),
     "live.js": (_HERE / "live.js", "text/javascript; charset=utf-8"),
     "live.css": (_HERE / "live.css", "text/css; charset=utf-8"),
+    "markets.js": (_HERE / "markets.js", "text/javascript; charset=utf-8"),
+    "markets.css": (_HERE / "markets.css", "text/css; charset=utf-8"),
     "globe.gl.min.js": (_HERE / "vendor" / "globe.gl-2.46.2.min.js", "text/javascript; charset=utf-8"),
     "earth.jpg": (_HERE / "vendor" / "earth-blue-marble-5400x2700.jpg", "image/jpeg"),
 }
 PINNED = {"/static/globe.gl.min.js", "/static/earth.jpg"}
 PAGE = _HERE / "board.html"
 LIVE_PAGE = _HERE / "live.html"  # the Middle East live console: several streams at once
+MARKETS_PAGE = _HERE / "markets.html"  # Task 5: information only; no frames, so the plain CSP
 MAX_DRAIN = 64 * 1024  # bytes of a refused request's body read and dropped; more and the connection just closes
 
 
@@ -148,6 +152,8 @@ class Handler(BaseHTTPRequestHandler):
             return 200, PAGE.read_bytes(), "text/html; charset=utf-8", PLAYER_CSP
         if path == "/live":
             return 200, LIVE_PAGE.read_bytes(), "text/html; charset=utf-8", PLAYER_CSP
+        if path == "/markets":
+            return 200, MARKETS_PAGE.read_bytes(), "text/html; charset=utf-8", CSP
         if path.startswith("/static/") and path[len("/static/"):] in STATIC:
             file, kind = STATIC[path[len("/static/"):]]
             return 200, file.read_bytes(), kind, CSP
@@ -165,6 +171,8 @@ class Handler(BaseHTTPRequestHandler):
         found = None
         if parts == ["board"]:
             found = "board"
+        elif parts == ["markets"]:
+            found = "markets"
         elif len(parts) == 2 and parts[0] == "layers":
             found = registry.layer(parts[1])
         elif len(parts) == 2 and parts[0] == "panels":
@@ -182,6 +190,8 @@ class Handler(BaseHTTPRequestHandler):
             now = self.server.now()
             if found == "board":
                 body = registry.board(store, now)
+            elif found == "markets":  # its own files (markets.txt, paper.json) sit beside the store
+                body = markets_api.markets_body(store, registry.collectors, self.server.db_path.parent, now)
             elif found == "item":
                 body = data.item_detail(store, registry, parts[1])
                 if body is None:
