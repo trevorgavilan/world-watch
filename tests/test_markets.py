@@ -364,3 +364,23 @@ class PaperTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReconPesoTest(unittest.TestCase):
+    def test_recon_shows_the_fix_and_crossed_lines_with_their_dates(self):
+        from worldwatch.recon import gather
+        from worldwatch.recon_html import render_html
+        from worldwatch.collectors import banxico
+
+        base = temp_dir()
+        (base / "markets.txt").write_text("peso above 18.50\n")
+        s = store()
+        s.save_items([obs("usd-mxn-fix", "18.6226", day(6))])
+        alert = peso_alert.collector(base / "markets.txt")
+        s.save_items(peso_alert.derive(s, NOW, base / "markets.txt"))
+        page = render_html(gather(s, [alert, banxico.PESO], NOW))
+        self.assertIn("The peso", page)
+        self.assertIn("18.6226", page)
+        self.assertIn("Peso past your line", page)
+        self.assertIn("06 Nov", page)
+        self.assertIn("Banco de México", page)

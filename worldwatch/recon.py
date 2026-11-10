@@ -28,6 +28,7 @@ QUAKE_LIMIT = 12
 KEV_LIMIT = 15
 NEWS_LIMIT = 10
 ALERT_WINDOW = timedelta(days=7)
+PESO_DAYS = 5
 ALERT_LIMIT = 100  # a week of 5 a day, "+N more" lines and every big outage: nothing cut after days away
 
 CREDITS = [
@@ -94,7 +95,7 @@ def show_time(iso: str) -> str:
 
 
 # Sources that give a date, not a moment: shown as that date, never shifted to CDMX time.
-DATE_ONLY_SOURCES = {"cisa-kev", "first-epss", "my-stack", "smn-cdmx"}  # my-stack: dated by its evidence
+DATE_ONLY_SOURCES = {"cisa-kev", "first-epss", "my-stack", "smn-cdmx", "peso-alert", "banxico-peso"}  # my-stack: dated by its evidence
 
 
 def show_event(row) -> str:
@@ -129,6 +130,16 @@ def gather(store: Store, collectors: list[Collector], now: datetime) -> Recon:
                   "Reportes de USGS y SSN, con la regla de distancia de World Watch (no es una alerta oficial)",
                   list(_since(store, "near-cdmx", now, ALERT_WINDOW, ALERT_LIMIT))),
         ]))
+    if "banxico-peso" in active:  # Task 5: the peso, information only; the rest is on the markets page
+        groups = []
+        if "peso-alert" in active:
+            groups.append(Group("Your peso lines crossed (data/markets.txt; worked out by World Watch)",
+                                "Tus líneas del peso cruzadas (data/markets.txt; cálculo de World Watch)",
+                                list(_since(store, "peso-alert", now, ALERT_WINDOW, ALERT_LIMIT))))
+        groups.append(Group("The FIX, last bank days (Banxico; information only, not advice)",
+                            "El FIX, últimos días hábiles (Banxico; solo información, no asesoría)",
+                            list(_since(store, "banxico-peso", now, ALERT_WINDOW, PESO_DAYS))))
+        sections.append(Section("markets", "The peso — last 7 days", "El peso — últimos 7 días", groups))
     if "usgs-quakes" in active:
         quakes = store.items_between("usgs-quakes", iso_utc(now - QUAKE_WINDOW), iso_utc(now + timedelta(minutes=5)))
         mexico = sorted((q for q in quakes if q["country"] == "MX"), key=_magnitude, reverse=True)
