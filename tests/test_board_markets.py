@@ -28,7 +28,7 @@ def markets_store():
     store.save_items(fed_press.COLLECTOR.parse(fixture("fed_press_monetary_2026-11-10.xml"), NOW))
     store.save_items([obs("usd-mxn-fix", "18.5000", day(5)), obs("usd-mxn-fix", "18.6226", day(6)),
                       obs("mx-target", "6.50", day(4)), obs("mx-target", "6.25", day(5)),
-                      obs("amx", "20.00", NOW - timedelta(hours=1))])
+                      obs("amx", "20.00", NOW - timedelta(hours=1)), obs("vix", "17.20", day(6))])
     book = paper.trade(paper.empty(), store, "buy", "amx", "10", NOW)
     paper.save(base / "paper.json", book)
     store.record_run("fred", NOW, NOW, ok=False, n_items=0, error="needs WW_FRED_KEY (a Windows user environment "
@@ -130,6 +130,11 @@ class Page(unittest.TestCase):
         numbered = self.b.run("[...document.querySelectorAll('.tile')].filter((t) => t.querySelector('.value'))"
                               ".every((t) => t.querySelector('.tag') && t.querySelector('.tag').textContent === 'Delayed')")
         self.assertTrue(numbered)
+
+    def test_a_copyrighted_series_keeps_its_owners_notice(self):
+        self.assertIn("Chicago Board Options Exchange, Inc. Reprinted with permission. Personal use only.",
+                      self.text(".tile[data-id='vix']"))
+        self.assertNotIn("Copyright", self.text(".tile[data-id='usd-mxn-fix']"))
 
     def test_the_disclaimer_and_credits_show(self):
         self.assertIn("not investment advice", self.text("#disclaimer"))

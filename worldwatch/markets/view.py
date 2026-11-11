@@ -69,7 +69,7 @@ def instrument_view(inst: Instrument, rows: list) -> dict:
         "id": inst.id, "group": inst.group, "en": inst.en, "es": inst.es, "source": inst.source,
         "unit_en": inst.unit_en, "unit_es": inst.unit_es, "decimals": inst.decimals, "daily": inst.daily,
         "delay_en": inst.delay_en, "delay_es": inst.delay_es, "page": inst.page, "term": inst.term,
-        "points": inst.points, "latest": None, "change": None, "history": [],
+        "points": inst.points, "notice": inst.notice, "latest": None, "change": None, "history": [],
     }
     if rows:
         at, value, _, fetched = rows[-1]

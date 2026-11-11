@@ -39,6 +39,7 @@ class Instrument:
     page: str         # the provider's own page for this number
     term: str = ""    # its glossary entry
     points: bool = False  # a rate: the change is in percentage points, not per cent
+    notice: str = ""      # the owner's copyright notice, kept with the number (FRED's terms)
 
 
 BANXICO_DELAY = ("Official daily rate (FIX), set by Banxico around 12:00 Mexico City time on bank days",
@@ -51,9 +52,13 @@ CG_DELAY = ("Delayed: CoinGecko's price, fetched every 15 minutes",
             "Con retraso: precio de CoinGecko, consultado cada 15 minutos")
 
 
-def _fred(id_, group, en, es, key, unit_en, unit_es, decimals, term="", points=False) -> Instrument:
+def _fred(id_, group, en, es, key, unit_en, unit_es, decimals, term="", points=False, notice="") -> Instrument:
     return Instrument(id_, group, en, es, "fred", key, unit_en, unit_es, decimals, True, *FRED_CLOSE,
-                      f"https://fred.stlouisfed.org/series/{key}", term, points)
+                      f"https://fred.stlouisfed.org/series/{key}", term, points, notice)
+
+
+# The series' own notices, as FRED's notes carried them on 2026-11-11: personal use only, kept with the number.
+SPDJI = "Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved. Personal use only."
 
 
 def _banxico(id_, group, en, es, key, unit_en, unit_es, decimals, delay, term="", points=False,
@@ -81,12 +86,15 @@ INSTRUMENTS: list[Instrument] = [
              "MXN per USD", "MXN por USD", 4, BANXICO_DELAY, "fix", source="banxico-peso"),
     _fred("usd-mxn-noon", "peso", "US dollar in pesos (New York noon)", "Dólar en pesos (mediodía, Nueva York)",
           "DEXMXUS", "MXN per USD", "MXN por USD", 4, "fx-rate"),
-    _fred("sp500", "us", "S&P 500", "S&P 500", "SP500", "points", "puntos", 2, "index"),
-    _fred("nasdaq", "us", "Nasdaq Composite", "Nasdaq Composite", "NASDAQCOM", "points", "puntos", 2, "index"),
+    _fred("sp500", "us", "S&P 500", "S&P 500", "SP500", "points", "puntos", 2, "index",
+          notice=SPDJI),
+    _fred("nasdaq", "us", "Nasdaq Composite", "Nasdaq Composite", "NASDAQCOM", "points", "puntos", 2,
+          "index", notice="Copyright © 2016, NASDAQ OMX Group, Inc. Personal use only."),
     _fred("dow", "us", "Dow Jones Industrial Average", "Promedio Industrial Dow Jones", "DJIA", "points", "puntos",
-          2, "index"),
+          2, "index", notice=SPDJI),
     _fred("vix", "us", "VIX (expected volatility)", "VIX (volatilidad esperada)", "VIXCLS", "points", "puntos",
-          2, "vix"),
+          2, "vix", notice="Copyright, 2016, Chicago Board Options Exchange, Inc. Reprinted with permission. "
+          "Personal use only."),
     _fred("dollar-index", "us", "Broad dollar index (Fed)", "Índice amplio del dólar (Fed)", "DTWEXBGS",
           "index", "índice", 2, "dollar-index"),
     _td("eww", "mexico", "iShares MSCI Mexico ETF (EWW)", "ETF iShares MSCI México (EWW)", "EWW", "USD", term="etf"),
@@ -104,9 +112,7 @@ INSTRUMENTS: list[Instrument] = [
     _cg("ethereum", "mxn", "Ether", "Ether", 2),
     _cg("solana", "usd", "Solana", "Solana", 2),
     _cg("solana", "mxn", "Solana", "Solana", 2),
-    _td("gold", "commodities", "Gold (spot, per troy ounce)", "Oro (spot, por onza troy)", "XAU/USD", "USD",
-        term="spot"),
-    _td("silver", "commodities", "Silver (spot, per troy ounce)", "Plata (spot, por onza troy)", "XAG/USD", "USD",
+    _td("gold", "commodities", "Gold (spot, per troy ounce)", "Oro (spot, por onza troy)", "XAU/USD", "USD",  # silver: not on the free plan (403)
         term="spot"),
     _fred("wti", "commodities", "Crude oil, WTI (per barrel)", "Petróleo WTI (por barril)", "DCOILWTICO", "USD",
           "USD", 2, "oil"),

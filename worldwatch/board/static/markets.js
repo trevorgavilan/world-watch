@@ -156,6 +156,7 @@
       `${item.daily ? "For" : "As of"} ${when(item.latest.at, item.daily)} · fetched ${ago(item.latest.fetched_at)} · `,
       link(item.source, item.page));
     box.append(meta, el("p", item.delay_en, "meta"));
+    if (item.notice) box.append(el("p", item.notice, "meta notice"));
     return box;
   }
 

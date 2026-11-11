@@ -84,7 +84,8 @@ RELEASES = {
     9: ("Retail sales", "Ventas minoristas"),
 }
 CALENDAR_SOURCE = "fred-calendar"
-CALENDAR_BASE = "https://api.stlouisfed.org/fred/releases/dates"
+CALENDAR_BASE = "https://api.stlouisfed.org/fred/release/dates"  # one release per request: the all-releases
+# list held 1,405 dates for 60 days (2026-11-11), past its 1,000 limit
 CALENDAR_AHEAD = timedelta(days=60)
 
 
@@ -93,9 +94,9 @@ def _calendar_url(last_ok: datetime | None, now: datetime) -> list[str]:
     if key is None:
         raise MissingKey(f"needs {KEY_NAME} (a Windows user environment variable Trevor creates)")
     return [f"{CALENDAR_BASE}?" + urlencode({
-        "api_key": key, "file_type": "json", "realtime_start": f"{now:%Y-%m-%d}",
+        "release_id": str(rid), "api_key": key, "file_type": "json", "realtime_start": f"{now:%Y-%m-%d}",
         "realtime_end": f"{now + CALENDAR_AHEAD:%Y-%m-%d}", "include_release_dates_with_no_data": "true",
-        "order_by": "release_date", "sort_order": "asc", "limit": "1000"})]
+        "sort_order": "asc"}) for rid in RELEASES]
 
 
 def _release(entry: dict, fetched_at: datetime):
@@ -104,7 +105,7 @@ def _release(entry: dict, fetched_at: datetime):
     return make_item(channel="markets", source=CALENDAR_SOURCE, native_id=f"{entry['release_id']}/{entry['date']}",
                      happened_at=day, fetched_at=fetched_at, title=en,
                      url=f"https://fred.stlouisfed.org/releases/{entry['release_id']}",
-                     summary=f"FRED release: {entry.get('release_name', '')}", licence=LICENCE,
+                     summary=f"Scheduled release, as FRED lists it (release {entry['release_id']})", licence=LICENCE,
                      raw={"es": es, **{k: entry.get(k) for k in ("release_id", "release_name", "date")}}, lang="en")
 
 

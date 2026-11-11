@@ -3,8 +3,10 @@
 GET https://api.twelvedata.com/quote?symbol=A,B,C with the key in the header `Authorization: apikey
 <key>` (their recommended way; never in the URL). A batch answers {symbol: quote}; one symbol answers
 the quote itself; a symbol the plan doesn't cover answers {"code": 4xx, "status": "error"} in its
-place. Quote: symbol, name, exchange, datetime, timestamp (unix s), close (the latest price),
-previous_close, percent_change, is_market_open.
+place. Quote: symbol, name, exchange, datetime, timestamp (the day's bar, unix s), last_quote_at (the price's
+moment), close (the latest price; the day's close once is_market_open is false),
+previous_close, percent_change, is_market_open. Checked 2026-11-11: XAU/USD is on the free plan, XAG/USD
+answers 403 "not available with your plan".
 Free (Basic) plan: 8 credits a minute, 800 a day, one credit per symbol; personal, non-commercial use
 (twelvedata.com/terms §2.3). So: batches of 8 symbols at least 62 s apart (http.HOST_MIN_GAP_S), once
 an hour, at most 30 symbols (720 a day). The key: WW_TWELVEDATA_KEY.
@@ -56,11 +58,12 @@ def _url_for(path: Path, last_ok: datetime | None, now: datetime) -> list[str]:
 
 
 def _build(inst, quote: dict, fetched_at: datetime):
-    stamp = quote.get("timestamp")
+    # last_quote_at: the moment of the price; timestamp is only the start of the day's bar (the open)
+    stamp = quote.get("last_quote_at", quote.get("timestamp"))
     if isinstance(stamp, bool) or not isinstance(stamp, int):
-        raise ValueError("no timestamp")
+        raise ValueError("no time")
     at = datetime.fromtimestamp(stamp, tz=timezone.utc)
-    kept = ("symbol", "name", "exchange", "currency", "datetime", "timestamp", "close", "previous_close",
+    kept = ("symbol", "name", "exchange", "currency", "datetime", "timestamp", "last_quote_at", "close", "previous_close",
             "change", "percent_change", "is_market_open")
     return observation(inst, value=quote.get("close"), at=at, fetched_at=fetched_at, licence=LICENCE,
                        stamp=at.strftime("%Y-%m-%dT%H"), change_pct=quote.get("percent_change"),
