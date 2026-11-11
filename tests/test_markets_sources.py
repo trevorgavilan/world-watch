@@ -44,8 +44,11 @@ class BanxicoTest(unittest.TestCase):
     def test_the_saved_rates_answer_gives_each_series(self):
         found = by_inst(banxico.RATES.parse(fixture("banxico_rates_2026-11-11.json"), NOW))
         self.assertEqual({k: len(v) for k, v in found.items()}, {"cetes-28": 6, "mx-target": 42, "tiie-28": 29})
-        newest = {k: value(max(v, key=lambda i: i.happened_at)) for k, v in found.items()}
-        self.assertEqual(newest, {"cetes-28": "6.50", "mx-target": "6.2500", "tiie-28": "6.5147"})
+        newest = {k: max(v, key=lambda i: i.happened_at) for k, v in found.items()}
+        self.assertEqual({k: value(v) for k, v in newest.items()},
+                         {"cetes-28": "6.2000", "mx-target": "6.2500", "tiie-28": "6.5147"})
+        # Banxico's own page, 11 Nov: "Resultados de la última subasta 10/11/2026 — Cetes a 28 días 6.20"
+        self.assertEqual(newest["cetes-28"].happened_at, "2026-11-10T00:00:00Z")
 
     def test_no_data_and_unknown_series_are_skipped_and_an_error_answer_fails(self):
         payload = json.dumps({"bmx": {"series": [

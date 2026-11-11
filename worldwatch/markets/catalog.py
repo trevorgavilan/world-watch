@@ -46,8 +46,10 @@ BANXICO_DELAY = ("Official daily rate (FIX), set by Banxico around 12:00 Mexico 
                  "Tipo de cambio oficial (FIX), lo fija Banxico hacia las 12:00 (CDMX) en días hábiles")
 FRED_CLOSE = ("Delayed: the previous close, as FRED publishes it (one bank day late or more)",
               "Con retraso: el cierre anterior, como lo publica FRED (un día hábil o más)")
-TD_DELAY = ("Delayed: Twelve Data's free plan, fetched once an hour",
-            "Con retraso: plan gratuito de Twelve Data, consultado cada hora")
+TD_DELAY = ("Delayed: Twelve Data's free plan, the last trade, fetched once an hour; after the bell it can differ "
+            "from the exchange's official close by a cent (AMX, 11 Nov: 25.81 here, 25.80 at the NYSE)",
+            "Con retraso: plan gratuito de Twelve Data, la última operación, consultada cada hora; tras el cierre "
+            "puede diferir un centavo del cierre oficial de la bolsa")
 CG_DELAY = ("Delayed: CoinGecko's price, fetched every 15 minutes",
             "Con retraso: precio de CoinGecko, consultado cada 15 minutos")
 
@@ -61,10 +63,14 @@ def _fred(id_, group, en, es, key, unit_en, unit_es, decimals, term="", points=F
 SPDJI = "Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved. Personal use only."
 
 
+BANXICO_FIX_PAGE = "https://www.banxico.org.mx/tipcamb/tipCamMIAction.do?idioma=sp"  # the FIX, day by day
+BANXICO_RATES_PAGE = "https://www.banxico.org.mx/tipcamb/main.do?page=tas&idioma=sp"  # rates and the last auction
+
+
 def _banxico(id_, group, en, es, key, unit_en, unit_es, decimals, delay, term="", points=False,
              source="banxico-rates") -> Instrument:
     return Instrument(id_, group, en, es, source, key, unit_en, unit_es, decimals, True, *delay,
-                      "https://www.banxico.org.mx/SieInternet/", term, points)
+                      BANXICO_FIX_PAGE if source == "banxico-peso" else BANXICO_RATES_PAGE, term, points)
 
 
 def _td(id_, group, en, es, symbol, unit, decimals=2, term="") -> Instrument:
@@ -124,8 +130,9 @@ INSTRUMENTS: list[Instrument] = [
              RATE_DELAY, "policy-rate", points=True),
     _banxico("tiie-28", "rates", "TIIE 28 days", "TIIE a 28 días", "SF43783", "%", "%", 4, RATE_DELAY, "tiie",
              points=True),
-    _banxico("cetes-28", "rates", "Cetes 28 days (weekly auction)", "Cetes a 28 días (subasta semanal)", "SF43936",
-             "%", "%", 2, ("Set at Banxico's weekly auction (Tuesdays)", "Se fija en la subasta semanal (martes)"),
+    _banxico("cetes-28", "rates", "Cetes 28 days (weekly auction)", "Cetes a 28 días (subasta semanal)", "SF60633",
+             "%", "%", 2, ("Set at the government's weekly auction, dated by the auction day (usually Tuesday)",
+                           "Se fija en la subasta semanal del gobierno; fechado el día de la subasta (normalmente martes)"),
              "cetes", points=True),
     _fred("fed-funds", "rates", "US federal funds rate (effective)", "Tasa de fondos federales (efectiva)", "DFF",
           "%", "%", 2, "policy-rate", points=True),
