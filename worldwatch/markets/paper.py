@@ -68,6 +68,8 @@ def _check_trade(t: object, where: str) -> None:
     """A hand-edited or damaged entry stops here, never deeper in the sums (or the markets page)."""
     if not isinstance(t, dict) or t.get("side") not in ("buy", "sell"):
         raise PaperError(f"{where}: not a buy or a sell")
+    if t.get("by", "you") not in BY:
+        raise PaperError(f"{where}: made by someone unknown")
     if not isinstance(t.get("instrument"), str) or not isinstance(t.get("key", ""), str):
         raise PaperError(f"{where}: no instrument")
     for name in ("qty", "price", "fx"):
@@ -141,11 +143,16 @@ def holdings(book: dict) -> dict[str, Decimal]:
     return {k: v for k, v in held.items() if v != 0}
 
 
+BY = ("you", "assistant")  # who made the trade: the assistant (a later task) keeps its own scored record
+
+
 def trade(book: dict, store: Store, side: str, name: str, qty_text: str, now: datetime,
-          watch: list[str] = ()) -> dict:
+          watch: list[str] = (), by: str = "you") -> dict:
     """A new ledger with the trade added (the old one is not changed)."""
     if side not in ("buy", "sell"):
         raise PaperError("buy or sell")
+    if by not in BY:
+        raise PaperError(f"a trade is made by one of {BY}")
     inst = find(name, watch)
     try:
         qty = Decimal(qty_text)
@@ -163,7 +170,7 @@ def trade(book: dict, store: Store, side: str, name: str, qty_text: str, now: da
         raise PaperError(f"not enough play money: this costs {cost:,.2f} MXN, cash is {cash(book):,.2f} MXN")
     if side == "sell" and qty > holdings(book).get(inst.id, Decimal(0)):
         raise PaperError(f"you hold {holdings(book).get(inst.id, Decimal(0))} of {inst.id}")
-    entry = {"at": iso_utc(now), "side": side, "instrument": inst.id, "key": inst.key, "source": inst.source,
+    entry = {"at": iso_utc(now), "by": by, "side": side, "instrument": inst.id, "key": inst.key, "source": inst.source,
              "qty": str(qty),
              "price": str(price), "currency": currency_of(inst), "fx": str(fx), "price_at": price_at}
     return {**book, "trades": [*book["trades"], entry]}

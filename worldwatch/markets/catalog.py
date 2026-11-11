@@ -40,6 +40,8 @@ class Instrument:
     term: str = ""    # its glossary entry
     points: bool = False  # a rate: the change is in percentage points, not per cent
     notice: str = ""      # the owner's copyright notice, kept with the number (FRED's terms)
+    curve: str = ""       # the yield curve it belongs to ("us", "mx"), at `years` to maturity
+    years: float = 0.0
 
 
 BANXICO_DELAY = ("Official daily rate (FIX), set by Banxico around 12:00 Mexico City time on bank days",
@@ -86,6 +88,23 @@ def _cg(coin, currency, en, es, decimals) -> Instrument:
 
 
 RATE_DELAY = ("Published by Banxico on the day it applies", "Publicada por Banxico el día que aplica")
+AUCTION_DELAY = ("Set at the government's weekly auction, dated by the auction day (usually Tuesday); the longer "
+                 "bonds are auctioned in rotation, weeks apart",
+                 "Se fija en la subasta semanal del gobierno; fechado el día de la subasta (normalmente martes); los "
+                 "bonos largos se subastan por turnos, con semanas de distancia")
+
+
+def _auction(id_, en, es, key, years, term) -> Instrument:
+    return Instrument(id_, "rates", en, es, "banxico-rates", key, "%", "%", 2, True, *AUCTION_DELAY,
+                      BANXICO_RATES_PAGE, term, True, "", "mx", years)
+
+
+def _treasury(id_, en, es, key, years) -> Instrument:
+    return Instrument(id_, "rates", f"US Treasury, {en}", f"Bono del Tesoro EUA, {es}", "fred", key, "%", "%", 2,
+                      True, *FRED_CLOSE, f"https://fred.stlouisfed.org/series/{key}", "yield", True, "", "us", years)
+
+CURVES = [("us", "US Treasury yields", "Rendimientos del Tesoro de EUA"),
+          ("mx", "Mexican government yields (auctions)", "Rendimientos del gobierno de México (subastas)")]
 
 INSTRUMENTS: list[Instrument] = [
     _banxico("usd-mxn-fix", "peso", "US dollar in pesos (FIX)", "Dólar en pesos (FIX)", "SF43718",
@@ -130,16 +149,16 @@ INSTRUMENTS: list[Instrument] = [
              RATE_DELAY, "policy-rate", points=True),
     _banxico("tiie-28", "rates", "TIIE 28 days", "TIIE a 28 días", "SF43783", "%", "%", 4, RATE_DELAY, "tiie",
              points=True),
-    _banxico("cetes-28", "rates", "Cetes 28 days (weekly auction)", "Cetes a 28 días (subasta semanal)", "SF60633",
-             "%", "%", 2, ("Set at the government's weekly auction, dated by the auction day (usually Tuesday)",
-                           "Se fija en la subasta semanal del gobierno; fechado el día de la subasta (normalmente martes)"),
-             "cetes", points=True),
+    *[_auction(f"cetes-{days}", f"Cetes {days} days", f"Cetes a {days} días", key, days / 365, "cetes")
+      for days, key in ((28, "SF60633"), (91, "SF60634"), (182, "SF60635"), (364, "SF60636"))],
+    *[_auction(f"mbono-{y}y", f"Mexican government bond (Bono M), {y} years", f"Bono M a {y} años", key, y, "yield")
+      for y, key in ((3, "SF60640"), (5, "SF60641"), (10, "SF60643"), (20, "SF60644"))],
     _fred("fed-funds", "rates", "US federal funds rate (effective)", "Tasa de fondos federales (efectiva)", "DFF",
           "%", "%", 2, "policy-rate", points=True),
-    _fred("ust-2y", "rates", "US Treasury, 2 years", "Bono del Tesoro EUA, 2 años", "DGS2", "%", "%", 2, "yield",
-          points=True),
-    _fred("ust-10y", "rates", "US Treasury, 10 years", "Bono del Tesoro EUA, 10 años", "DGS10", "%", "%", 2,
-          "yield", points=True),
+    *[_treasury(f"ust-{label}", en, es, key, years) for label, en, es, key, years in (
+        ("3m", "3 months", "3 meses", "DGS3MO", 0.25), ("6m", "6 months", "6 meses", "DGS6MO", 0.5),
+        ("1y", "1 year", "1 año", "DGS1", 1), ("2y", "2 years", "2 años", "DGS2", 2), ("5y", "5 years", "5 años", "DGS5", 5),
+        ("10y", "10 years", "10 años", "DGS10", 10), ("30y", "30 years", "30 años", "DGS30", 30))],
 ]
 
 

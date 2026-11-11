@@ -34,7 +34,7 @@ def number(text: object) -> Decimal:
 
 
 def observation(inst: Instrument, *, value: object, at: datetime, fetched_at: datetime, licence: str,
-                stamp: str, record: object, change_pct: object = None):
+                stamp: str, record: object, change_pct: object = None, source: str | None = None):
     """An Item for one observation. `stamp` names it (the day, or the hour), so a re-fetch updates it."""
     figure = number(value)
     raw = {"instrument": inst.id, "value": str(figure), "record": record}
@@ -45,7 +45,7 @@ def observation(inst: Instrument, *, value: object, at: datetime, fetched_at: da
             pass  # a bad reported change never costs the price
     return make_item(
         channel=CHANNEL,
-        source=inst.source,
+        source=source or inst.source,  # a history collector stores under its own source, same instrument
         native_id=f"{inst.id}/{stamp}",
         happened_at=at,
         fetched_at=fetched_at,

@@ -12,7 +12,7 @@ from decimal import Decimal
 from ..item import iso_utc, parse_iso_utc
 from ..store import Store
 from . import CHANNEL, DISCLAIMER_EN, DISCLAIMER_ES, number
-from .catalog import GROUPS, INSTRUMENTS, Instrument
+from .catalog import CURVES, GROUPS, INSTRUMENTS, Instrument
 
 HISTORY_DAILY = timedelta(days=400)
 HISTORY_POINTS = 120          # the chart's points: enough to see a trend, never a flood
@@ -36,6 +36,8 @@ def _observations(store: Store, sources: list[str], now: datetime) -> dict[str, 
             except (ValueError, KeyError, TypeError):
                 continue
             found.setdefault(str(raw.get("instrument")), []).append((row["happened_at"], value, raw, row["fetched_at"]))
+    for rows in found.values():  # an instrument's hourly prices and its daily history come from two sources
+        rows.sort(key=lambda r: r[0])
     return found
 
 
@@ -103,3 +105,47 @@ def markets_view(store: Store, sources: list[str], now: datetime, *, watch: list
         "disclaimer_es": DISCLAIMER_ES,
         **(extra or {}),
     }
+
+
+HISTORY_OF = {"coingecko": "coingecko-history", "twelvedata": "twelvedata-history"}  # an hourly source's daily past
+CURVE_BACK = timedelta(days=30)
+SERIES_POINTS = 3000
+
+
+def curves(store: Store, sources: list[str], now: datetime) -> list[dict]:
+    """Each yield curve: every maturity's newest number and the one about a month before it, each with its
+    own date (Mexico's long bonds are auctioned weeks apart)."""
+    rows = _observations(store, sources, now)
+    out = []
+    for curve_id, en, es in CURVES:
+        points = []
+        for inst in sorted((i for i in INSTRUMENTS if i.curve == curve_id and i.source in sources), key=lambda i: i.years):
+            mine = rows.get(inst.id, [])
+            if not mine:
+                continue
+            at, value, _, _ = mine[-1]
+            before = [r for r in mine if r[0] <= iso_utc(parse_iso_utc(at) - CURVE_BACK)]
+            points.append({"id": inst.id, "years": inst.years, "en": inst.en, "es": inst.es, "value": float(value),
+                           "at": at, "before": float(before[-1][1]) if before else None,
+                           "before_at": before[-1][0] if before else None})
+        if points:
+            out.append({"id": curve_id, "en": en, "es": es, "points": points})
+    return out
+
+
+def series(store: Store, inst: Instrument, sources: list[str], now: datetime) -> dict:
+    """Everything stored for one instrument in the last 400 days, oldest first: the big chart's points.
+    Hourly prices and their daily history come from two sources; a day can hold both."""
+    wanted = [s for s in (inst.source, HISTORY_OF.get(inst.source)) if s and s in sources]
+    found = store.items_with(wanted, iso_utc(now - HISTORY_DAILY), iso_utc(now + timedelta(minutes=5)),
+                             f'"instrument": "{inst.id}"', limit=SERIES_POINTS) if wanted else []
+    points = []
+    for row in reversed(found):
+        try:
+            raw = json.loads(row["raw"])
+            if raw.get("instrument") == inst.id:
+                points.append([row["happened_at"], float(number(raw["value"]))])
+        except (ValueError, KeyError, TypeError):
+            continue
+    points.sort(key=lambda p: p[0])
+    return {"id": inst.id, "daily": inst.daily, "decimals": inst.decimals, "points": points}

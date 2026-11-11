@@ -11,8 +11,8 @@ from pathlib import Path
 from ..item import iso_utc
 from ..store import Store
 from . import CHANNEL, calendar, glossary, paper, rules
-from .catalog import watch_instrument
-from .view import markets_view
+from .catalog import INSTRUMENTS, watch_instrument
+from .view import curves, markets_view, series
 
 ALERT_SOURCE = "peso-alert"
 ALERT_WINDOW = timedelta(days=30)
@@ -41,6 +41,20 @@ def _calendar(store: Store, now: datetime) -> list[dict]:
         return []
 
 
+def _fresh(store: Store, collector, now: datetime) -> dict:
+    from ..board.data import freshness  # the Board's own rule for fresh and stale
+
+    return freshness(store, collector, now)
+
+
+def series_body(store: Store, collectors: list, data_dir: Path, inst_id: str, now: datetime) -> dict | None:
+    """/api/markets/series/<id>: one instrument's stored numbers for the big chart; None if unknown."""
+    sources = [c.source for c in collectors if c.channel == CHANNEL]
+    watch = [watch_instrument(s) for s in rules.load(data_dir / "markets.txt").watch]
+    inst = next((i for i in INSTRUMENTS + watch if i.id == inst_id and i.source in sources), None)
+    return series(store, inst, sources, now) if inst else None
+
+
 def markets_body(store: Store, collectors: list, data_dir: Path, now: datetime) -> dict:
     sources = [c.source for c in collectors if c.channel == CHANNEL]
     number_sources = [s for s in sources if s not in NOT_SHOWN]
@@ -63,5 +77,7 @@ def markets_body(store: Store, collectors: list, data_dir: Path, now: datetime) 
         "paper_problem": book_problem,
         "glossary": glossary.glossary(),
         "waiting": {src: _last_error(store, src) for src in number_sources if _last_error(store, src)},
+        "curves": curves(store, number_sources, now),
+        "sources": [_fresh(store, c, now) for c in collectors if c.channel == CHANNEL],
     }
     return markets_view(store, number_sources, now, watch=watch, extra=extra)

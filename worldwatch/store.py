@@ -126,6 +126,18 @@ class Store:
             (source, start, end, limit),
         ).fetchall()
 
+    def items_with(self, sources: list[str], start: str, end: str, raw_needle: str, *,
+                   limit: int = 5000) -> list[sqlite3.Row]:
+        """Items of these sources whose raw record holds `raw_needle` verbatim (markets: one instrument),
+        newest first. The needle is matched literally: LIKE's wildcards in it are escaped."""
+        needle = raw_needle.replace("!", "!!").replace("%", "!%").replace("_", "!_")
+        marks = ", ".join("?" for _ in sources)
+        return self.db.execute(
+            f"SELECT * FROM items WHERE source IN ({marks}) AND happened_at >= ? AND happened_at < ? "
+            "AND raw LIKE ? ESCAPE '!' ORDER BY happened_at DESC, id LIMIT ?",
+            (*sources, start, end, f"%{needle}%", limit),
+        ).fetchall()
+
     def source_state(self, source: str) -> sqlite3.Row | None:
         return self.db.execute("SELECT * FROM source_state WHERE source = ?", (source,)).fetchone()
 

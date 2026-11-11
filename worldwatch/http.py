@@ -21,7 +21,7 @@ CHUNK_BYTES = 64 * 1024
 # YouTube throttles quick runs of requests (its channel feeds answered 404/500, 2026-11-09): oEmbed is spaced.
 # Twelve Data's free plan allows 8 credits a minute: one request of up to 8 symbols, then a minute's gap.
 HOST_MIN_GAP_S = {"api.gdeltproject.org": 6.0, "services.nvd.nist.gov": 6.5, "storage.googleapis.com": 1.0,
-                  "www.youtube.com": 4.0, "api.twelvedata.com": 62.0, "api.stlouisfed.org": 1.0}
+                  "www.youtube.com": 4.0, "api.twelvedata.com": 62.0, "api.coingecko.com": 3.0, "api.stlouisfed.org": 1.0}
 
 
 class FetchError(Exception):

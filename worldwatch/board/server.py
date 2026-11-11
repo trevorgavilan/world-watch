@@ -173,6 +173,8 @@ class Handler(BaseHTTPRequestHandler):
             found = "board"
         elif parts == ["markets"]:
             found = "markets"
+        elif len(parts) == 3 and parts[:2] == ["markets", "series"] and data.ID.fullmatch(parts[2]):
+            found = "series"
         elif len(parts) == 2 and parts[0] == "layers":
             found = registry.layer(parts[1])
         elif len(parts) == 2 and parts[0] == "panels":
@@ -192,6 +194,10 @@ class Handler(BaseHTTPRequestHandler):
                 body = registry.board(store, now)
             elif found == "markets":  # its own files (markets.txt, paper.json) sit beside the store
                 body = markets_api.markets_body(store, registry.collectors, self.server.db_path.parent, now)
+            elif found == "series":
+                body = markets_api.series_body(store, registry.collectors, self.server.db_path.parent, parts[2], now)
+                if body is None:
+                    return 404, b"not found\n", "text/plain; charset=utf-8", CSP
             elif found == "item":
                 body = data.item_detail(store, registry, parts[1])
                 if body is None:

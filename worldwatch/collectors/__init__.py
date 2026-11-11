@@ -118,7 +118,7 @@ def all_collectors(base: Path | None = None) -> list[Collector]:
     and the peso alerts worked out from Trevor's lines. The watchlist alerts come first,
     so they lead the Board (the runner still derives them after the fetches); their list lives in
     `<base>/watchlist.txt` (D-20)."""
-    from . import (banxico, cisa_kev, coingecko, eonet, epss, fed_press, firms, fred, gdacs, live_streams, my_stack,
+    from . import (banxico, cisa_kev, coingecko, eonet, epss, fed_press, firms, fred, gdacs, history, live_streams, my_stack,
                    near_cdmx, nvd, osv, peso_alert, smn, ssn, status_pages, swpc, twelvedata, usgs)
 
     data = base or Path(__file__).resolve().parents[2] / "data"
@@ -129,4 +129,4 @@ def all_collectors(base: Path | None = None) -> list[Collector]:
             gdacs.COLLECTOR, eonet.COLLECTOR, firms.COLLECTOR, swpc.COLLECTOR, smn.COLLECTOR,
             *live_streams.COLLECTORS, firms.MIDEAST_COLLECTOR,
             *banxico.COLLECTORS, fred.COLLECTOR, fred.CALENDAR, coingecko.COLLECTOR, twelvedata.collector(markets),
-            fed_press.COLLECTOR]
+            fed_press.COLLECTOR, history.COINGECKO, history.twelvedata_history(markets)]
