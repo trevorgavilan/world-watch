@@ -78,7 +78,7 @@ def _fetch_all(collector: Collector, fetcher, last_ok: datetime | None, now: dat
             first_counts = fetched == 1 and not collector.each_optional
             if first_counts or not collector.follow_optional or isinstance(err, RateLimited):
                 raise
-            log.warning("%s: skipped %s: %s", collector.source, url, err)
+            log.warning("%s: skipped %s: %s", collector.source, redact(url), err)  # FRED: the key is in its URL
             failure = err
             continue
         answered += 1

@@ -135,7 +135,8 @@ class Binding(BoardCase):
         self.assertEqual(set(registry.layers), {"quakes", "ssn-quakes", "gdacs", "eonet", "fires", "live-cams", "heat-mideast"})
         self.assertEqual(set(registry.panels), {"kev", "nvd", "osv", "epss", "my-stack", "github-status", "cloudflare-status",
                                                 "claude-status", "google-workspace-status", "near-cdmx",
-                                                "space-weather", "cdmx-weather", "live-cams", "live-news"})
+                                                "space-weather", "cdmx-weather", "live-cams", "live-news",
+                                                "peso", "peso-alerts", "fed-statements"})
 
 
 class HostHeader(BoardCase):

@@ -43,6 +43,10 @@ class PesoLine:
     def text(self) -> str:
         return f"peso {self.side} {self.level}"
 
+    @property
+    def key(self) -> tuple[str, Decimal]:
+        return self.side, self.level.normalize()  # 19.5 and 19.50 are the same line
+
     def crossed(self, fix: Decimal) -> bool:
         return fix > self.level if self.side == "above" else fix < self.level
 
@@ -52,6 +56,7 @@ class Rules:
     peso: list[PesoLine] = field(default_factory=list)
     watch: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
+    readable: bool = True  # False: the file itself could not be read (missing, too big, not UTF-8)
 
 
 def parse(text: str) -> Rules:
@@ -89,12 +94,12 @@ def load(path: Path) -> Rules:
     """The rules in the file; none (and one problem) when it is missing, too big or not UTF-8."""
     try:
         if path.stat().st_size > MAX_BYTES:
-            return Rules(problems=[f"{path.name} is over {MAX_BYTES} bytes; not read"])
+            return Rules(problems=[f"{path.name} is over {MAX_BYTES} bytes; not read"], readable=False)
         return parse(path.read_text(encoding="utf-8-sig"))
     except FileNotFoundError:
-        return Rules(problems=[f"no {path.name} yet"])
+        return Rules(problems=[f"no {path.name} yet"], readable=False)
     except (OSError, UnicodeDecodeError):
-        return Rules(problems=[f"{path.name} could not be read (UTF-8 text only)"])
+        return Rules(problems=[f"{path.name} could not be read (UTF-8 text only)"], readable=False)
 
 
 def ensure(path: Path) -> None:

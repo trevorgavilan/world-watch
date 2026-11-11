@@ -42,13 +42,19 @@ def latest_fix(store, now: datetime):
     return None
 
 
+def _line_key(text: object):
+    parsed = market_rules.parse(str(text or "")).peso
+    return parsed[0].key if parsed else None
+
+
 def derive(store, now: datetime, path: Path) -> list[Item]:
     rules = market_rules.load(path)
     found = latest_fix(store, now)
-    wanted = {line.text for line in rules.peso}
-    stale = [row["id"] for row in store.items_between(SOURCE, "0000", "9999", limit=500)
-             if json.loads(row["raw"]).get("line") not in wanted]
-    store.forget_items(SOURCE, stale)
+    if rules.readable:  # a file that can't be read right now (mid-save, missing) never wipes past alerts
+        wanted = {line.key for line in rules.peso}
+        stale = [row["id"] for row in store.items_between(SOURCE, "0000", "9999", limit=500)
+                 if _line_key(json.loads(row["raw"]).get("line")) not in wanted]
+        store.forget_items(SOURCE, stale)
     if found is None:
         return []
     day, fix = found
@@ -58,7 +64,7 @@ def derive(store, now: datetime, path: Path) -> list[Item]:
             continue
         word_en, word_es = ("above", "arriba de") if line.side == "above" else ("below", "abajo de")
         items.append(make_item(
-            channel=CHANNEL, source=SOURCE, native_id=f"{line.text}/{day:%Y-%m-%d}", happened_at=day,
+            channel=CHANNEL, source=SOURCE, native_id=f"{line.key[0]} {line.key[1]:f}/{day:%Y-%m-%d}", happened_at=day,
             fetched_at=now, url="https://www.banxico.org.mx/tipcamb/main.do?page=tip&idioma=sp",
             title=f"Peso past your line: the FIX is {fix} pesos per dollar, {word_en} {line.level}",
             summary=(f"El FIX del {day:%d/%m/%Y} es {fix} pesos por dólar, {word_es} tu línea de {line.level}. "

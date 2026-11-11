@@ -34,6 +34,13 @@ def _last_error(store: Store, source: str) -> str | None:
     return state["last_error"] if state and state["last_error"] else None
 
 
+def _calendar(store: Store, now: datetime) -> list[dict]:
+    try:
+        return calendar.upcoming(store, now)
+    except (ValueError, KeyError, TypeError):  # a damaged row never takes the whole page down
+        return []
+
+
 def markets_body(store: Store, collectors: list, data_dir: Path, now: datetime) -> dict:
     sources = [c.source for c in collectors if c.channel == CHANNEL]
     number_sources = [s for s in sources if s not in NOT_SHOWN]
@@ -51,7 +58,7 @@ def markets_body(store: Store, collectors: list, data_dir: Path, now: datetime) 
         "alerts": _rows(store, ALERT_SOURCE, now, ALERT_WINDOW, 10) if ALERT_SOURCE in sources else [],
         "statements": _rows(store, STATEMENTS_SOURCE, now, timedelta(days=90), STATEMENTS)
         if STATEMENTS_SOURCE in sources else [],
-        "calendar": calendar.upcoming(store, now),
+        "calendar": _calendar(store, now),
         "paper": book,
         "paper_problem": book_problem,
         "glossary": glossary.glossary(),

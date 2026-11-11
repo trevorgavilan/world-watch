@@ -44,6 +44,16 @@ def get_key(name: str) -> str | None:
     return value
 
 
+def require_key(name: str) -> str:
+    """The key, or MissingKey saying whether it is missing or set but malformed (so Trevor knows which)."""
+    key = get_key(name)
+    if key is not None:
+        return key
+    if os.environ.get(name) or _from_registry(name):
+        raise MissingKey(f"{name} is set but malformed (letters, digits, '-' and '_' only, 8 to 128 of them)")
+    raise MissingKey(f"needs {name} (a Windows user environment variable Trevor creates)")
+
+
 def redact(text: str) -> str:
     for value in _seen:
         text = text.replace(value, MASK)

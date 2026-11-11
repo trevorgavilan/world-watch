@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from functools import partial
 from urllib.parse import parse_qs, urlencode, urlsplit
 
-from ..keys import MissingKey, get_key
+from ..keys import require_key
 from ..item import make_item
 from ..markets import observation
 from ..markets.catalog import by_source
@@ -34,9 +34,7 @@ OVERLAP = timedelta(days=14)
 
 
 def _url_for(last_ok: datetime | None, now: datetime) -> list[str]:
-    key = get_key(KEY_NAME)
-    if key is None:
-        raise MissingKey(f"needs {KEY_NAME} (a Windows user environment variable Trevor creates)")
+    key = require_key(KEY_NAME)
     start = (now - FIRST_REACH) if last_ok is None else min(last_ok - OVERLAP, now - OVERLAP)
     return [f"{BASE}?" + urlencode({"series_id": i.key, "api_key": key, "file_type": "json",
                                     "observation_start": f"{start:%Y-%m-%d}"}) for i in INSTRUMENTS]
@@ -72,6 +70,8 @@ COLLECTOR = Collector(
     parse_records=parse_records,
     url_for=_url_for,
     parse_with_url=True,
+    follow_optional=True,  # one series failing (a 5xx, a 400) is skipped and logged; the run fails only if none answers
+    each_optional=True,
 )
 
 
@@ -90,9 +90,7 @@ CALENDAR_AHEAD = timedelta(days=60)
 
 
 def _calendar_url(last_ok: datetime | None, now: datetime) -> list[str]:
-    key = get_key(KEY_NAME)
-    if key is None:
-        raise MissingKey(f"needs {KEY_NAME} (a Windows user environment variable Trevor creates)")
+    key = require_key(KEY_NAME)
     return [f"{CALENDAR_BASE}?" + urlencode({
         "release_id": str(rid), "api_key": key, "file_type": "json", "realtime_start": f"{now:%Y-%m-%d}",
         "realtime_end": f"{now + CALENDAR_AHEAD:%Y-%m-%d}", "include_release_dates_with_no_data": "true",
@@ -124,4 +122,6 @@ CALENDAR = Collector(
     licence=LICENCE,
     parse_records=parse_calendar,
     url_for=_calendar_url,
+    follow_optional=True,
+    each_optional=True,
 )

@@ -28,6 +28,8 @@ def number(text: object) -> Decimal:
         raise ValueError(f"not a number: {text!r}") from err
     if not value.is_finite():
         raise ValueError("not finite")
+    if value != 0 and not -12 <= value.adjusted() <= 15:  # 1e-12 to 1e15: any real price or rate; 1e999999 is not
+        raise ValueError(f"out of range: {text!r}")
     return value
 
 
@@ -37,7 +39,10 @@ def observation(inst: Instrument, *, value: object, at: datetime, fetched_at: da
     figure = number(value)
     raw = {"instrument": inst.id, "value": str(figure), "record": record}
     if change_pct is not None:
-        raw["change_pct"] = str(number(change_pct))
+        try:
+            raw["change_pct"] = str(number(change_pct))
+        except ValueError:
+            pass  # a bad reported change never costs the price
     return make_item(
         channel=CHANNEL,
         source=inst.source,

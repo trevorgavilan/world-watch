@@ -50,7 +50,11 @@ def decisions(today: date) -> list[dict]:
 def releases(store: Store, now: datetime) -> list[dict]:
     rows = []
     start = iso_utc(datetime.combine(now.date(), datetime.min.time(), now.tzinfo))
+    state = store.source_state(RELEASE_SOURCE)
+    latest = state["last_ok_at"] if state else None
     for row in store.items_between(RELEASE_SOURCE, start, iso_utc(now + AHEAD), limit=200, order="happened_at ASC"):
+        if latest and row["updated_at"] != latest:
+            continue  # a date FRED no longer lists (a release moved): only the newest answer counts
         raw = json.loads(row["raw"])
         rows.append({"day": row["happened_at"][:10], "en": row["title"], "es": raw.get("es", row["title"]),
                      "note": "US data release", "url": row["url"], "source": "fred", "fetched_at": row["fetched_at"]})

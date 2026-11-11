@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from functools import partial
 
-from ..keys import MissingKey, get_key
+from ..keys import require_key
 from ..markets import observation
 from ..markets.catalog import by_source
 from ..views import Panel
@@ -28,9 +28,7 @@ OVERLAP = timedelta(days=14)
 
 
 def _headers() -> dict[str, str]:
-    token = get_key(KEY_NAME)
-    if token is None:
-        raise MissingKey(f"needs {KEY_NAME} (a Windows user environment variable Trevor creates)")
+    token = require_key(KEY_NAME)
     return {"Bmx-Token": token, "Accept": "application/json"}
 
 
@@ -50,7 +48,8 @@ def parse_records(instruments, data: object, fetched_at: datetime) -> list:
         series = data["bmx"]["series"]
     except (TypeError, KeyError) as err:
         if isinstance(data, dict) and "error" in data:
-            raise ParseError(f"banxico: the API said {str(data['error'].get('mensaje', 'error'))[:120]!r}") from err
+            said = data["error"].get("mensaje", "error") if isinstance(data["error"], dict) else data["error"]
+            raise ParseError(f"banxico: the API said {str(said)[:120]!r}") from err
         raise ParseError("banxico: no bmx.series in the answer") from err
     if not isinstance(series, list):
         raise ParseError("banxico: series is not a list")

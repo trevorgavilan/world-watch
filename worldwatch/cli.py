@@ -281,6 +281,9 @@ def cmd_paper(store, collectors, base, args) -> int:
     except paper.PaperError as err:
         print(f"Not done: {err}")
         return 1
+    except (ValueError, ArithmeticError) as err:  # a damaged ledger: say so, no traceback
+        print(f"Not done: the practice ledger could not be used ({err})")
+        return 1
     print(f"Practice portfolio: {view['total_mxn']} MXN (start {view['start_mxn']}), cash {view['cash_mxn']} MXN")
     for h in view["holdings"]:
         print(f"  {h['id']}: {h['qty']} — cost {h['cost_mxn']} MXN, now {h['value_mxn'] or 'no fresh price'}")

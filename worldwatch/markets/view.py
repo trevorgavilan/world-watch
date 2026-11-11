@@ -18,7 +18,7 @@ HISTORY_DAILY = timedelta(days=400)
 HISTORY_POINTS = 120          # the chart's points: enough to see a trend, never a flood
 MOVE_FRESH = timedelta(days=5)  # a move counts in "what moved" only when its number is this recent
 MOVES = 6
-ROWS_PER_SOURCE = 40_000
+ROWS_PER_SOURCE = 20_000  # the newest rows: daily series reach back 400 days, hourly ones about a month
 
 
 def _observations(store: Store, sources: list[str], now: datetime) -> dict[str, list[tuple[str, Decimal, dict, str]]]:
@@ -26,7 +26,8 @@ def _observations(store: Store, sources: list[str], now: datetime) -> dict[str, 
     found: dict[str, list] = {}
     start, end = iso_utc(now - HISTORY_DAILY), iso_utc(now + timedelta(minutes=5))
     for source in sources:
-        for row in store.items_between(source, start, end, limit=ROWS_PER_SOURCE, order="happened_at ASC"):
+        newest = store.items_between(source, start, end, limit=ROWS_PER_SOURCE, order="happened_at DESC")
+        for row in reversed(newest):  # never the oldest N: the store keeps everything, the tiles want today
             if row["channel"] != CHANNEL:
                 continue
             try:

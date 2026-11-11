@@ -55,8 +55,27 @@ def load(path: Path) -> dict:
         raise PaperError(f"{path.name} could not be read: {err}") from err
     if not isinstance(book, dict) or not isinstance(book.get("trades"), list):
         raise PaperError(f"{path.name} is not a practice ledger")
-    number(book.get("start_mxn"))
+    try:
+        number(book.get("start_mxn"))
+    except ValueError as err:
+        raise PaperError(f"{path.name}: the starting amount is not a number") from err
+    for n, t in enumerate(book["trades"], 1):
+        _check_trade(t, f"{path.name}, trade {n}")
     return book
+
+
+def _check_trade(t: object, where: str) -> None:
+    """A hand-edited or damaged entry stops here, never deeper in the sums (or the markets page)."""
+    if not isinstance(t, dict) or t.get("side") not in ("buy", "sell"):
+        raise PaperError(f"{where}: not a buy or a sell")
+    if not isinstance(t.get("instrument"), str) or not isinstance(t.get("key", ""), str):
+        raise PaperError(f"{where}: no instrument")
+    for name in ("qty", "price", "fx"):
+        try:
+            if number(t.get(name)) <= 0:
+                raise ValueError
+        except ValueError as err:
+            raise PaperError(f"{where}: {name} is not a positive number") from err
 
 
 def save(path: Path, book: dict) -> None:

@@ -21,7 +21,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 from ..http import RateLimited
-from ..keys import MissingKey, get_key
+from ..keys import require_key
 from ..markets import observation
 from ..markets import rules as market_rules
 from ..markets.catalog import by_source, watch_instrument
@@ -45,9 +45,7 @@ def instruments(path: Path) -> list:
 
 
 def _headers() -> dict[str, str]:
-    key = get_key(KEY_NAME)
-    if key is None:
-        raise MissingKey(f"needs {KEY_NAME} (a Windows user environment variable Trevor creates)")
+    key = require_key(KEY_NAME)
     return {"Authorization": f"apikey {key}"}
 
 
@@ -83,7 +81,10 @@ def parse_records(path: Path, data: object, fetched_at: datetime, url: str | Non
     if data.get("code") == 429:
         raise RateLimited(f"{SOURCE}: out of credits for now", 60.0)
     if (whole := _error(data)) is not None:
-        raise ParseError(f"{SOURCE}: {whole}")
+        if len(asked) == 1 and data.get("code") != 401:  # one symbol refused (a typo, not on the plan): skip it
+            log.info("%s: %s not quoted (%s)", SOURCE, asked[0], whole)
+            return []
+        raise ParseError(f"{SOURCE}: {whole}")  # the whole batch refused, or the key (401)
     answers = {asked[0]: data} if len(asked) == 1 else data
     by_key = {i.key: i for i in instruments(path)}
     builds = []
