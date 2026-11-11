@@ -27,6 +27,7 @@ PRICE_FRESH = timedelta(days=5)
 MAX_TRADES = 5000
 MAX_BYTES = 2_000_000
 FIX_ID = "usd-mxn-fix"
+RECENT = 20  # the newest trades the page lists
 
 
 class PaperError(ValueError):
@@ -199,4 +200,6 @@ def summary(book: dict, store: Store, now: datetime) -> dict:
     start = number(book["start_mxn"])
     return {"start_mxn": f"{start:.2f}", "cash_mxn": f"{cash(book):.2f}", "total_mxn": f"{total:.2f}",
             "change_pct": float((total - start) / start * 100) if start else None, "holdings": rows,
-            "trades": len(book["trades"]), "last_trade": book["trades"][-1]["at"] if book["trades"] else None}
+            "trades": len(book["trades"]), "last_trade": book["trades"][-1]["at"] if book["trades"] else None,
+            "recent": [{k: t.get(k) for k in ("at", "by", "side", "instrument", "qty", "price", "currency", "fx", "price_at")}
+                       for t in book["trades"][-RECENT:][::-1]]}

@@ -7,66 +7,97 @@
 <title>Markets · World Watch</title>
 <link rel="stylesheet" href="/static/markets.css">
 <script src="/static/markets.js" defer></script>
+<script src="/static/mk_list.js" defer></script>
+<script src="/static/mk_chart.js" defer></script>
+<script src="/static/mk_panels.js" defer></script>
 </head>
 <body>
-<header class="bar">
+<header class="top">
   <h1>Markets <span class="es">· Mercados</span></h1>
-  <p id="updated" class="updated"></p>
+  <ul id="strip" class="strip" aria-label="Your starred numbers"></ul>
   <a class="back" href="/">Back to the Board</a>
 </header>
 <p id="disclaimer" class="disclaimer" role="note"></p>
-<main class="page">
-  <div class="main">
-    <section id="alerts-box" class="box alert" aria-label="Peso alerts" hidden>
-      <h2>Peso — your lines crossed · tus líneas cruzadas</h2>
-      <ul id="alerts" class="list"></ul>
-    </section>
-    <section class="box" aria-label="What moved">
-      <h2>What moved · Qué se movió</h2>
-      <p class="hint">Worked out by World Watch from the numbers below: the biggest changes, by per cent, among
-        numbers from the last few days. Why they moved is in the official statements, at the side.</p>
-      <ol id="moves" class="moves"></ol>
-    </section>
-    <div id="groups"></div>
+<section id="head" class="head" aria-label="The picked number">
+  <div class="pick">
+    <div class="pick-name">
+      <button id="star" class="star" type="button" aria-pressed="false" aria-label="Star this number">☆</button>
+      <h2 id="pick-name"></h2>
+      <button id="pick-term" class="term" type="button" aria-expanded="false" hidden>?</button>
+    </div>
+    <p id="pick-sub" class="meta"></p>
   </div>
-  <aside class="side">
-    <section class="box" aria-label="Your peso lines">
-      <h2>Your lines · Tus líneas</h2>
-      <ul id="lines" class="list"></ul>
-      <p class="hint">Edit <code>data\markets.txt</code> to change them: <code>peso above 19.50</code>,
-        <code>peso below 17.80</code>, <code>watch NVDA</code>.</p>
-      <ul id="problems" class="list problems"></ul>
-    </section>
-    <section class="box" aria-label="Calendar">
-      <h2>Coming up · Próximamente</h2>
-      <ul id="calendar" class="list"></ul>
-    </section>
-    <section class="box" aria-label="Why it moved">
-      <h2>Why it moved — official statements · Comunicados oficiales</h2>
-      <ul id="statements" class="list"></ul>
-    </section>
-    <section class="box" aria-label="Practice portfolio">
-      <h2>Practice portfolio · Portafolio de práctica</h2>
-      <p class="hint">Play money only: no broker, no real orders, no money moves. Trade with
-        <code>python -m worldwatch paper buy AMX 10</code>.</p>
-      <div id="paper"></div>
-    </section>
-    <section class="box" aria-label="Glossary">
-      <h2>Glossary · Glosario</h2>
-      <div id="glossary"></div>
-    </section>
+  <dl id="stats" class="stats"></dl>
+  <ul id="countdown" class="countdown" aria-label="Coming up"></ul>
+</section>
+<p id="pick-define" class="define" hidden></p>
+<main class="term-grid">
+  <aside class="pane list-pane" aria-label="Markets list">
+    <div id="list-tabs" class="tabs" role="tablist" aria-label="Groups"></div>
+    <ul id="list" class="rows" role="listbox" aria-label="Numbers" tabindex="0"></ul>
+  </aside>
+  <section class="pane chart-pane" aria-label="Chart">
+    <div class="pane-bar">
+      <div class="tabs" role="tablist" aria-label="View">
+        <button type="button" role="tab" data-view="chart" aria-selected="true">Chart</button>
+        <button type="button" role="tab" data-view="curve" aria-selected="false">Yield curve</button>
+      </div>
+      <div id="ranges" class="seg" role="group" aria-label="Range">
+        <button type="button" data-range="7" aria-pressed="false">1W</button>
+        <button type="button" data-range="30" aria-pressed="false">1M</button>
+        <button type="button" data-range="91" aria-pressed="false">3M</button>
+        <button type="button" data-range="365" aria-pressed="true">1Y</button>
+      </div>
+    </div>
+    <div id="chart" class="chart" aria-live="polite"></div>
+    <div id="curves" class="curves" hidden></div>
+  </section>
+  <aside class="pane side-pane" aria-label="Context">
+    <div class="tabs" role="tablist" aria-label="Context">
+      <button type="button" role="tab" data-side="moved" aria-selected="true">What moved</button>
+      <button type="button" role="tab" data-side="why" aria-selected="false">Why</button>
+      <button type="button" role="tab" data-side="lines" aria-selected="false">Your lines</button>
+    </div>
+    <div id="side-moved" class="side-body">
+      <p class="hint">Worked out by World Watch: the biggest changes by per cent, among numbers from the last few days.</p>
+      <ol id="moves" class="rows plain"></ol>
+    </div>
+    <div id="side-why" class="side-body" hidden>
+      <p class="hint">What the central banks themselves said. News comes with the news channel.</p>
+      <ul id="statements" class="rows plain"></ul>
+    </div>
+    <div id="side-lines" class="side-body" hidden>
+      <ul id="alerts" class="rows plain alerts"></ul>
+      <ul id="lines" class="rows plain"></ul>
+      <p class="hint">Edit <code>data\markets.txt</code>: <code>peso above 19.50</code>, <code>peso below 17.80</code>,
+        <code>watch NVDA</code>.</p>
+      <ul id="problems" class="rows plain problems"></ul>
+    </div>
   </aside>
 </main>
-<footer class="foot">
+<section class="pane bottom-pane" aria-label="Practice, calendar and glossary">
+  <div class="tabs" role="tablist" aria-label="More">
+    <button type="button" role="tab" data-bottom="holdings" aria-selected="true">Practice holdings</button>
+    <button type="button" role="tab" data-bottom="trades" aria-selected="false">Practice trades</button>
+    <button type="button" role="tab" data-bottom="calendar" aria-selected="false">Calendar</button>
+    <button type="button" role="tab" data-bottom="glossary" aria-selected="false">Glossary</button>
+  </div>
+  <div id="bottom-holdings" class="bottom-body"></div>
+  <div id="bottom-trades" class="bottom-body" hidden></div>
+  <div id="bottom-calendar" class="bottom-body" hidden><ul id="calendar" class="rows plain"></ul></div>
+  <div id="bottom-glossary" class="bottom-body" hidden></div>
+</section>
+<footer class="status">
+  <ul id="dots" class="dots" aria-label="Sources and how fresh they are"></ul>
   <p id="status" role="status"></p>
-  <ul class="credits">
-    <li>This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.
-      <a href="https://fred.stlouisfed.org/docs/api/terms_of_use.html" rel="noopener noreferrer" target="_blank">Terms</a></li>
-    <li>Index series © S&amp;P Dow Jones Indices LLC, Nasdaq, Inc. and Cboe; personal use.</li>
-    <li>Fuente: Banco de México, <a href="https://www.banxico.org.mx/SieInternet/" rel="noopener noreferrer" target="_blank">SIE</a>.</li>
-    <li><a href="https://www.coingecko.com/" rel="noopener noreferrer" target="_blank">Powered by CoinGecko</a></li>
-    <li>Market data by <a href="https://twelvedata.com/" rel="noopener noreferrer" target="_blank">Twelve Data</a> (delayed).</li>
-    <li>Statements: Board of Governors of the Federal Reserve System.</li>
+  <ul class="credits" aria-label="Sources and credits">
+      <li>This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.
+        <a href="https://fred.stlouisfed.org/docs/api/terms_of_use.html" rel="noopener noreferrer" target="_blank">Terms</a></li>
+      <li>Index series © S&amp;P Dow Jones Indices LLC, Nasdaq, Inc. and Cboe; personal use.</li>
+      <li>Fuente: Banco de México, <a href="https://www.banxico.org.mx/SieInternet/" rel="noopener noreferrer" target="_blank">SIE</a>.</li>
+      <li><a href="https://www.coingecko.com/" rel="noopener noreferrer" target="_blank">Powered by CoinGecko</a></li>
+      <li>Market data by <a href="https://twelvedata.com/" rel="noopener noreferrer" target="_blank">Twelve Data</a> (delayed).</li>
+      <li>Statements: Board of Governors of the Federal Reserve System.</li>
   </ul>
 </footer>
 </body>

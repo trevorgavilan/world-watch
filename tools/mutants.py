@@ -385,8 +385,8 @@ MUTANTS = [
      "if (text !== undefined && text !== null) node.innerHTML = String(text);"),
     ("markets: one bad ticker stops all of Twelve Data", "worldwatch/collectors/twelvedata.py",
      'if len(asked) == 1 and data.get("code") != 401:', "if False:"),
-    ("markets: a number shown without its Delayed label", "worldwatch/board/static/markets.js",
-     'meta.append(el("span", "Delayed", "tag"),', 'meta.append(el("span", "", "tag"),'),
+    ("markets: a number shown without its Delayed label", "worldwatch/board/static/mk_panels.js",
+     'src.append(el("span", "Delayed", "tag"),', 'src.append(el("span", "", "tag"),'),
 ]
 
 

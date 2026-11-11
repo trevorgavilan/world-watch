@@ -129,4 +129,4 @@ def all_collectors(base: Path | None = None) -> list[Collector]:
             gdacs.COLLECTOR, eonet.COLLECTOR, firms.COLLECTOR, swpc.COLLECTOR, smn.COLLECTOR,
             *live_streams.COLLECTORS, firms.MIDEAST_COLLECTOR,
             *banxico.COLLECTORS, fred.COLLECTOR, fred.CALENDAR, coingecko.COLLECTOR, twelvedata.collector(markets),
-            fed_press.COLLECTOR, history.COINGECKO, history.twelvedata_history(markets)]
+            fed_press.COLLECTOR, history.collector(markets)]

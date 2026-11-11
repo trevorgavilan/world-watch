@@ -72,7 +72,7 @@ def instrument_view(inst: Instrument, rows: list) -> dict:
         "id": inst.id, "group": inst.group, "en": inst.en, "es": inst.es, "source": inst.source,
         "unit_en": inst.unit_en, "unit_es": inst.unit_es, "decimals": inst.decimals, "daily": inst.daily,
         "delay_en": inst.delay_en, "delay_es": inst.delay_es, "page": inst.page, "term": inst.term,
-        "points": inst.points, "notice": inst.notice, "latest": None, "change": None, "history": [],
+        "points": inst.points, "notice": inst.notice, "history_note": HISTORY_NOTE.get(inst.source, ""), "latest": None, "change": None, "history": [],
     }
     if rows:
         at, value, _, fetched = rows[-1]
@@ -107,7 +107,12 @@ def markets_view(store: Store, sources: list[str], now: datetime, *, watch: list
     }
 
 
-HISTORY_OF = {"coingecko": "coingecko-history", "twelvedata": "twelvedata-history"}  # an hourly source's daily past
+HISTORY_OF = {"coingecko": "twelvedata-history", "twelvedata": "twelvedata-history"}  # an hourly source's daily past
+HISTORY_NOTE = {
+    "coingecko": "Daily history: Twelve Data (Binance's close; the peso pairs are Twelve Data's synthetic rate). "
+                 "The latest price: CoinGecko.",
+    "twelvedata": "Daily history and the latest price: Twelve Data (delayed).",
+}
 CURVE_BACK = timedelta(days=30)
 SERIES_POINTS = 3000
 
@@ -148,4 +153,5 @@ def series(store: Store, inst: Instrument, sources: list[str], now: datetime) ->
         except (ValueError, KeyError, TypeError):
             continue
     points.sort(key=lambda p: p[0])
-    return {"id": inst.id, "daily": inst.daily, "decimals": inst.decimals, "points": points}
+    return {"id": inst.id, "daily": inst.daily, "decimals": inst.decimals, "points": points,
+            "note": HISTORY_NOTE.get(inst.source, "")}

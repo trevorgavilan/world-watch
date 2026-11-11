@@ -173,3 +173,42 @@ class TwelveDataTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HistoryTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.path = temp_dir() / "markets.txt"
+        self.path.write_text("")
+        from worldwatch.collectors import history
+        self.history = history
+        self.col = history.collector(self.path)
+
+    def test_a_year_of_closes_for_the_listings_and_gold(self):
+        url = f"{self.history.BASE}?symbol=AMX,XAU/USD&interval=1day"
+        found = by_inst(self.col.parse(fixture("twelvedata_time_series_2026-11-11.json"), NOW, url))
+        self.assertEqual({k: len(v) for k, v in found.items()}, {"amx": 365, "gold": 365})
+        newest = max(found["amx"], key=lambda i: i.happened_at)
+        self.assertEqual((newest.happened_at, value(newest), newest.source),
+                         ("2026-11-11T00:00:00Z", "25.81", "twelvedata-history"))
+
+    def test_crypto_history_maps_twelve_data_pairs_to_our_coins(self):
+        url = f"{self.history.BASE}?symbol=BTC/MXN,SOL/USD&interval=1day"
+        found = by_inst(self.col.parse(fixture("twelvedata_time_series_crypto_2026-11-11.json"), NOW, url))
+        self.assertEqual(sorted(found), ["bitcoin-mxn", "solana-usd"])
+        self.assertEqual(value(max(found["bitcoin-mxn"], key=lambda i: i.happened_at)), "1390844.75")
+
+    def test_one_request_per_eight_symbols_crypto_included(self):
+        urls = self.history._urls(self.path, None, NOW)
+        symbols = [s for u in urls for s in parse_qs(urlsplit(u).query)["symbol"][0].split(",")]
+        self.assertEqual(len(symbols), 8 + 6)
+        self.assertIn("BTC/MXN", symbols)
+        self.assertTrue(all(len(parse_qs(urlsplit(u).query)["symbol"][0].split(",")) <= 8 for u in urls))
+
+    def test_items_with_matches_one_instrument_literally(self):
+        from tests.test_markets import obs
+        s = store()
+        s.save_items([obs("ust-2y", "3.7", NOW), obs("ust-10y", "4.8", NOW)])
+        rows = s.items_with(["fred"], "2000", "3000", '"instrument": "ust-2y"')
+        self.assertEqual([json.loads(r["raw"])["instrument"] for r in rows], ["ust-2y"])
+        self.assertEqual(s.items_with(["fred"], "2000", "3000", '"instrument": "ust-%"'), [])
+        self.assertEqual(s.items_with(["fred"], "2000", "3000", '"instrument": "ust_2y"'), [])
